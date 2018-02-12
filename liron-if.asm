@@ -22,40 +22,46 @@ fcchz	macro	string
 	endm
 
 
-Z00	equ	$00
-Z01	equ	$01
-Z24	equ	$24
-Z25	equ	$25
-Z40	equ	$40
-Z41	equ	$41
-Z42	equ	$42
-Z43	equ	$43
-Z44	equ	$44
-Z45	equ	$45
-Z46	equ	$46
-Z47	equ	$47
-Z48	equ	$48
-Z4b	equ	$4b
-Z4c	equ	$4c
-Z4d	equ	$4d
-Z4e	equ	$4e
-Z4f	equ	$4f
-Z50	equ	$50
-Z51	equ	$51
-Z52	equ	$52
-Z53	equ	$53
-Z54	equ	$54
-Z55	equ	$55
-Z56	equ	$56
-Z57	equ	$57
-slot	equ	$58
-Z59	equ	$59
-Z5a	equ	$5a
-Z5b	equ	$5b
+Z00		equ	$00
+Z01		equ	$01
+
+mon_ch		equ	$24
+mon_cv		equ	$25
+
+checksum	equ	$40
+Z40		equ	$40
+Z41		equ	$41
+
+
+prodos_cmd_blk	equ	$42
+
+prodos_command	equ	$42	; Smartport command is also copied here
+prodos_unit_num	equ	$43
+prodos_buffer	equ	$44
+prodos_block	equ	$46
+
+Z48		equ	$48
+Z4b		equ	$4b
+Z4c		equ	$4c
+Z4d		equ	$4d
+Z4e		equ	$4e
+Z4f		equ	$4f
+Z50		equ	$50
+Z51		equ	$51
+Z52		equ	$52
+Z53		equ	$53
+Z54		equ	$54
+Z55		equ	$55
+Z56		equ	$56
+Z57		equ	$57
+slot		equ	$58
+Z59		equ	$59
+Z5a		equ	$5a
+Z5b		equ	$5b
 
 
 ; per-slot screen holes (index by slot)
-sh_prodos_flag	equ	$0478
+sh_prodos_flag	equ	$0478	; MSB = 1 for ProDOS, 0 for SmartPort
 sh_04f8	equ	$04f8
 sh_0578	equ	$0578
 sh_05f8	equ	$05f8
@@ -68,7 +74,7 @@ sh_07f8	equ	$07f8
 ; global screen holes
 gh_06f8	equ	$06f8
 gh_0778	equ	$0778
-gh_07f8	equ	$07f8
+gh_shared_rom_slot	equ	$07f8
 
 
 D0800	equ	$0800
@@ -145,7 +151,7 @@ Lcn0e:	ldx	#slotnum
 ; combined ProDOS/SmartPort/boot dispatch
 ; carry = 1 for boot, 0 for ProDOS/SmartPort
 Lcn14:	ldx	#$c0 + slotnum
-	stx	gh_07f8
+	stx	gh_shared_rom_slot
 	ldx	#slotnum
 	lda	rom_dis
 	jmp	shared_rom_entry
@@ -174,8 +180,8 @@ Lcn3e:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn3e
 	eor	Dca27,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 	bne	Lcn51
 	inc	Z57
@@ -184,24 +190,24 @@ Lcn51:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn51
 	eor	Dca37,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 
 Lcn60:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn60
 	eor	Dca47,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 
 Lcn6f:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn6f
 	eor	Dca57,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 	bne	Lcn82
 	inc	Z57
@@ -211,24 +217,24 @@ Lcn84:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn84
 	eor	Dca37,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 
 Lcn93:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn93
 	eor	Dca47,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 
 Lcna2:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcna2
 	eor	Dca57,x
 	sta	(Z56),y
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	iny
 	dec	Z4b
 	beq	Lcnb8
@@ -245,7 +251,7 @@ Lcnc2:	lda	iwm_q6l + (slotnum << 4)
 	sec
 	rol
 	and	Z59
-	eor	Z40
+	eor	checksum
 
 Lcncd:	ldy	iwm_q6l + (slotnum << 4)
 	bpl	Lcncd
@@ -297,6 +303,7 @@ Sc800:	jsr	Scaee
 	jsr	Sca05
 	ldy	#$07
 	jsr	Scba9
+
 	lda	iwm_sel_drive_2,x
 	lda	iwm_motor_on,x
 	ldy	#$32
@@ -306,32 +313,46 @@ Lc813:	lda	iwm_q7l,x
 	bne	Lc813
 	sec
 	jmp	Lc949
-Lc81f:	lda	iwm_ph_0_on,x
-	ldy	#$05
+
+
+; send packet sync sequence
+Lc81f:	lda	iwm_ph_0_on,x	; turn on REQ
+
+	ldy	#packet_sync_sequence_len - 1
 	lda	#$ff
-	sta	iwm_q7h,x
-Lc829:	lda	Dc950,y
+	sta	iwm_q7h,x	; set write mode
+Lc829:	lda	packet_sync_sequence,y
 Lc82c:	asl	iwm_q6l,x
 	bcc	Lc82c
 	sta	iwm_q6h,x
 	dey
 	bpl	Lc829
-	lda	Z5a
+
+	lda	Z5a		; destination ID
 	ora	#$80
-	jsr	Sc9d8
-	jsr	Sc9d6
-	lda	Z5b
-	jsr	Sc9d8
-	jsr	Sc9d6
-	jsr	Sc9d6
-	lda	Z4c
+	jsr	send_nib7
+
+	jsr	send_80		; source address, always $80 (host)
+
+	lda	Z5b		; packet type
+	jsr	send_nib7
+
+	jsr	send_80		; aux type
+
+	jsr	send_80		; data statys byte
+
+	lda	Z4c		; length of packet "odd bytes", 0-6
 	ora	#$80
-	jsr	Sc9d8
-	lda	Z4b
+	jsr	send_nib7
+
+	lda	Z4b		; number of encoded 7-byte groups
 	ora	#$80
-	jsr	Sc9d8
-	lda	Z4c
-	beq	Lc873
+	jsr	send_nib7
+
+	lda	Z4c		; any "odd bytes"?
+	beq	Lc873		;   no, skip
+
+; send "odd bytes"
 	ldy	#$ff
 	lda	Z59
 Lc862:	asl	iwm_q6l,x
@@ -342,11 +363,17 @@ Lc862:	asl	iwm_q6l,x
 	ora	#$80
 	cpy	Z4c
 	bcc	Lc862
-Lc873:	lda	Z4b
-	bne	Lc87a
-	jmp	Lc913
+
+; send groups
+Lc873:	lda	Z4b		; any groups to send?
+	bne	Lc87a		;   yes
+
+	jmp	send_checksum	;   no
+
 Lc87a:	nop
 	ldy	#$00
+
+; send a group
 Lc87d:	lda	Z41
 	sta	iwm_q6h,x
 	lda	Z4d
@@ -364,6 +391,7 @@ Lc888:	ldy	iwm_q6l,x
 	bne	Lc8a1
 	inc	Z57
 	jmp	Lc8a3
+
 Lc8a1:	pha
 	pla
 Lc8a3:	lda	#$02
@@ -422,41 +450,67 @@ Lc8df:	lda	Z51
 	asl
 	rol	Z41
 	iny
-	dec	Z4b
-	beq	Lc913
-	jmp	Lc87d
-Lc913:	lda	Z40
+
+	dec	Z4b		; sent last group?
+	beq	send_checksum	;   yes
+
+	jmp	Lc87d		;   no, send another group
+
+
+; send checksum in FM
+send_checksum:
+; send checksum even bits (bit 6, 4, 2, 0)
+	lda	checksum
 	ora	#$aa
-Lc917:	ldy	iwm_q6l,x
+
+; can't call send_nib7 to send the first part of the checksum, because
+; it would modify the checksum in the process
+
+Lc917:	ldy	iwm_q6l,x	; wait for write buffer ready
 	bpl	Lc917
-	sta	iwm_q6h,x
-	lda	Z40
+
+	sta	iwm_q6h,x	; write data
+
+; send checksum odd bits (bit 7, 5, 3, 1, shifted right one bit)
+	lda	checksum
 	lsr
 	ora	#$aa
-	jsr	Sc9d8
-	lda	#$c8
-	jsr	Sc9d8
-Lc92c:	lda	iwm_q6l,x
-	and	#$40
-	bne	Lc92c
-	sta	iwm_q6h,x
-	ldy	#$0a
-Lc938:	dey
-	bne	Lc943
-	lda	#$01
+	jsr	send_nib7
 
-Sc93d:	jsr	Sca1f
-	sec
-	bcs	Lc949
-Lc943:	lda	iwm_q7l,x
-	bmi	Lc938
-	clc
-Lc949:	lda	iwm_ph_0_off,x
+	lda	#$c8		; send packet end mark
+	jsr	send_nib7
+
+; wait for write underrun; IWM write state will clear when
+; done writing and no data presented
+Lc92c:	lda	iwm_q6l,x	; read IWM handshake register
+	and	#$40		; in write state?
+	bne	Lc92c		;   yes, loop
+
+	sta	iwm_q6h,x	; prepare to read status register
+
+	ldy	#$0a		; counter to wait for ACK
+Lc938:	dey			; timeout?
+	bne	Lc943		; no, go check status
+
+	lda	#$01
+Sc93d:	jsr	get_slot_x
+	sec			; indicate error
+	bcs	Lc949		; always taken
+
+Lc943:	lda	iwm_q7l,x	; read status
+	bmi	Lc938		; ACK (write protect)? no, keep waiting
+
+	clc			; yes, so no error
+	
+Lc949:	lda	iwm_ph_0_off,x	; turn off REQ
 	lda	iwm_q6l,x
 	rts
 
 
-Dc950:	fcb	$c3,$ff,$fc,$f3,$cf,$3f
+; packet sync byte sequence, in reverse order
+packet_sync_sequence:
+	fcb	$c3,$ff,$fc,$f3,$cf,$3f
+packet_sync_sequence_len equ *-packet_sync_sequence
 
 
 	jsr	Sc95b
@@ -468,7 +522,7 @@ Sc95b:	nop
 Lc95d:	jmp	Sc93d
 
 Sc960:	lda	#$00
-	sta	Z40
+	sta	checksum
 	lda	Z54
 	sta	Z56
 	lda	Z55
@@ -499,8 +553,8 @@ Lc995:	lda	iwm_q6l,x
 	and	#$7f
 	sta	Z4b,y
 	eor	#$80
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	dey
 	bpl	Lc995
 	lda	Z4c
@@ -527,14 +581,18 @@ Lc9cc:	sta	(Z54),y
 	bcc	Lc9c1
 Lc9d3:	jmp	(Z52)
 
-Sc9d6:	lda	#$80
 
-Sc9d8:	ldy	iwm_q6l,x
-	bpl	Sc9d8
+send_80:
+	lda	#$80
+
+send_nib7:
+	ldy	iwm_q6l,x
+	bpl	send_nib7
 	sta	iwm_q6h,x
-	eor	Z40
-	sta	Z40
+	eor	checksum
+	sta	checksum
 	rts
+
 
 Sc9e5:	jsr	Sca0f
 	lda	iwm_ph_0_on,x
@@ -554,19 +612,23 @@ Lca01:	dex
 	bne	Lca01
 	rts
 
-Sca05:	jsr	Sca1f
+
+Sca05:	jsr	get_slot_x
 	lda	iwm_ph_1_on,x
 	lda	iwm_ph_3_on,x
 	rts
 
-Sca0f:	jsr	Sca1f
+
+Sca0f:	jsr	get_slot_x
 	lda	iwm_ph_0_off,x
 	lda	iwm_ph_1_off,x
 	lda	iwm_ph_2_off,x
 	lda	iwm_ph_3_off,x
 	rts
 
-Sca1f:	lda	slot
+
+get_slot_x:
+	lda	slot
 	asl
 	asl
 	asl
@@ -600,33 +662,41 @@ Sca76:	jsr	Sca8a
 	bcc	Lca75
 	lda	#$80
 	jsr	Scded
+
 	lda	gh_06f8
 	sta	Z4d
 	lda	gh_0778
 	sta	Z4e
 
-Sca8a:	lda	#$b8
-	ldy	#$0b
+Sca8a:	lda	#3000 & $ff	; retry 3000 times!
+	ldy	#3000 >> 8
 	ldx	slot
 	sta	sh_04f8,x
 	tya
 	sta	sh_0578,x
+
 Lca97:	lda	Z4d
 	sta	gh_06f8
 	lda	Z4e
 	sta	gh_0778
+
 	jsr	Sc800
+
 	lda	gh_06f8
 	sta	Z4d
 	lda	gh_0778
 	sta	Z4e
-	bcc	Lcabc
-	ldx	slot
+
+	bcc	Lcabc		; if no error, done
+
+	ldx	slot		; decrement retry count
 	dec	sh_04f8,x
 	bne	Lca97
 	dec	sh_0578,x
 	bpl	Lca97
+
 Lcabc:	rts
+
 
 Scabd:	ldy	slot
 	lda	#$05
@@ -647,6 +717,7 @@ Dcadc:	fcb	$00,$04,$01
 Dcadf:	fcb	$00,$01,$02,$04,$09,$12
 Dcae5:	fcb	$00,$01,$02,$04,$01,$02
 Dcaeb:	fcb	$00,$7f,$ff
+
 
 Scaee:	ldx	Z4e
 	beq	Lcb05
@@ -709,7 +780,7 @@ Lcb5f:	eor	(Z54),y
 	dey
 	bne	Lcb5f
 	eor	(Z54),y
-Lcb66:	sta	Z40
+Lcb66:	sta	checksum
 	pla
 	sta	Z55
 	ldy	Z4c
@@ -829,7 +900,7 @@ Lcc03:	lda	Z40,x
 Lcc19:	lda	#$00
 	jsr	Scded
 
-Lcc1e:	lda	Z43
+Lcc1e:	lda	prodos_unit_num
 	rol
 	php
 	rol
@@ -843,21 +914,21 @@ Lcc1e:	lda	Z43
 	eor	#$02
 Lcc30:	tax
 	inx
-	stx	Z43
+	stx	prodos_unit_num
 	lda	sh_prodos_flag,y	; ProDOS or SmartPort?
 	bpl	Lcc3c
 
 	jmp	Lcccf
 
-; SmartPort
+; SmartPort command, convert it into a ProDOS command
 Lcc3c:	lda	sh_05f8,y	; set Z54 to point to cmd num -1
 	sta	Z54
 	lda	sh_0678,y
 	sta	Z55
 
-	ldy	#$01		; copy SmartPort command to Z42
+	ldy	#$01		; copy SmartPort command
 	lda	(Z54),y
-	sta	Z42
+	sta	prodos_command
 	iny
 
 	lda	(Z54),y		; copy SmartPort arg list pointer to Z54
@@ -869,7 +940,7 @@ Lcc3c:	lda	sh_05f8,y	; set Z54 to point to cmd num -1
 
 	lda	#$01
 
-	ldx	Z42		; SmartPort command in range ($00 to $09)?
+	ldx	prodos_command		; SmartPort command in range ($00 to $09)?
 	cpx	#$0a
 	bcc	Lcc62
 
@@ -878,14 +949,16 @@ Lcc5f:	jmp	Lcd9f
 Lcc62:	ldy	#$00
 	lda	(Z54),y
 	sta	Z5a
+
 	ldy	#$08
 Lcc6a:	lda	(Z54),y
-	sta	Z42,y
+	sta	prodos_cmd_blk,y
 	dey
 	bne	Lcc6a
-	lda	Z43
+
+	lda	prodos_unit_num
 	bne	Lcccf
-	ldx	Z42
+	ldx	prodos_command
 	lda	Dcde3,x
 	and	#$7f
 	tay
@@ -901,26 +974,26 @@ Lcc8d:	lda	#$00
 Lcc92:	txa
 	bne	Lccb8
 	lda	#$21
-	ldx	Z46
+	ldx	prodos_block
 	bne	Lcc5f
 	txa
 	ldx	slot
 	ldy	#$07
-Lcca0:	sta	(Z44),y
+Lcca0:	sta	(prodos_buffer),y
 	dey
 	bne	Lcca0
 	lda	sh_07f8,x
-	sta	(Z44),y
+	sta	(prodos_buffer),y
 	iny
 	lda	#$00
-	sta	(Z44),y
+	sta	(prodos_buffer),y
 	lda	#$08
 	dey
 	jsr	Sce4f
 	jmp	Lcc8d
 Lccb8:	cmp	#$04
 	bne	Lccc7
-	ldx	Z46
+	ldx	prodos_block
 	beq	Lcccb
 	dex
 	beq	Lcccb
@@ -935,44 +1008,47 @@ Lcccb:	lda	#$1f
 Lcccf:	lda	#$28
 	ldy	slot
 	ldx	sh_07f8,y
-	cpx	Z43
+	cpx	prodos_unit_num
 	bcc	Lccc5
 
 	lda	#$09
 	sta	Z4d
 	lda	#$00
 	sta	Z4e
+
 	sta	Z55
 	lda	#$42
 	sta	Z54
-	ldx	slot
 
+	ldx	slot
 	lda	sh_prodos_flag,x	; ProDOS or SmartPort?
 	bpl	Lcd02
 
-	ldx	Z42
+	ldx	prodos_command
 	lda	Dcde3,x
 	and	#$7f
 	sta	Z5a
 	lda	#$00
 	sta	Z48
-	lda	Z42
+	lda	prodos_command
 	bne	Lcd02
-	sta	Z46
+	sta	prodos_block
 Lcd02:	lda	Z5a
-	ldx	Z43
+	ldx	prodos_unit_num
 	stx	Z5a
-	sta	Z43
+	sta	prodos_unit_num
 	lda	#$80
 	sta	Z5b
 	jsr	Sca0f
 	jsr	Sca76
 	bcs	Lcd5c
-	lda	Z44
+
+	lda	prodos_buffer
 	sta	Z54
-	lda	Z45
+	lda	prodos_buffer+1
 	sta	Z55
-	ldx	Z42
+
+	ldx	prodos_command
 	lda	Dcde3,x
 	bpl	Lcd60
 	cpx	#$04
@@ -996,8 +1072,8 @@ Lcd41:	cpx	#$02
 	lda	#$00
 	ldx	#$02
 	bne	Lcd4f
-Lcd4b:	ldx	Z47
-	lda	Z46
+Lcd4b:	ldx	prodos_block+1
+	lda	prodos_block
 Lcd4f:	stx	Z4e
 	sta	Z4d
 	lda	#$82
@@ -1006,10 +1082,12 @@ Lcd4f:	stx	Z4e
 	bcc	Lcd60
 Lcd5c:	lda	#$06
 	bne	Lcd9f
+
 Lcd60:	ldy	slot
 	lda	sh_prodos_flag,y	; ProDOS or SmartPort?
 	bpl	Lcd73
-	lda	Z42
+
+	lda	prodos_command
 	bne	Lcd73
 	lda	#$45
 	ldx	#$00
@@ -1019,16 +1097,18 @@ Lcd73:	jsr	Scabd
 	bcs	Lcd5c
 	jsr	Scbbf
 	jsr	Sce4f
-	lda	Z42
+	lda	prodos_command
 	bne	Lcd9d
 	ldx	slot
 	lda	sh_prodos_flag,x	; ProDOS or SmartPort?
 	bpl	Lcd9d
-	lda	Z46
+
+; ProDOS
+	lda	prodos_block
 	sta	sh_05f8,x
-	lda	Z47
+	lda	prodos_block+1
 	sta	sh_0678,x
-	lda	Z45
+	lda	prodos_buffer+1
 	and	#$10
 	bne	Lcd9d
 	lda	#$2f
@@ -1081,19 +1161,19 @@ Scded:	pha
 	jsr	Sc9e5
 	pla
 	tax
-	lda	Z42
+	lda	prodos_command
 	pha
-	lda	Z43
+	lda	prodos_unit_num
 	pha
-	lda	Z46
+	lda	prodos_block
 	pha
-	stx	Z46
+	stx	prodos_block
 	lda	#$05
-	sta	Z42
+	sta	prodos_command
 	lda	#$00
 	sta	Z5a
 	lda	#$02
-	sta	Z43
+	sta	prodos_unit_num
 	lda	#$42
 	sta	Z54
 	lda	#$00
@@ -1117,11 +1197,11 @@ Lce34:	lda	Z5a
 	ldy	slot
 	sta	sh_07f8,y
 	pla
-	sta	Z46
+	sta	prodos_block
 	pla
-	sta	Z43
+	sta	prodos_unit_num
 	pla
-	sta	Z42
+	sta	prodos_command
 	lda	#$a5
 	sta	sh_06f8,y
 	eor	#$ff
@@ -1143,7 +1223,7 @@ boot:	stx	slot
 ; copy boot_prodos_command_block into zero page for use
 	ldy	#boot_prodos_command_block_len - 1
 Lce65:	lda	boot_prodos_command_block,y
-	sta	Z42,y
+	sta	prodos_cmd_blk,y
 	dey
 	bpl	Lce65
 
@@ -1152,7 +1232,7 @@ Lce65:	lda	boot_prodos_command_block,y
 	asl
 	asl
 	asl
-	sta	Z43
+	sta	prodos_unit_num
 
 	jsr	execute_command		; read the boot block
 	bcs	boot_error
@@ -1178,16 +1258,16 @@ boot_error:
 	ldx	Z00
 	bne	Lcea4
 	ldx	Z01
-	cpx	gh_07f8
+	cpx	gh_shared_rom_slot
 	bne	Lcea4
 	jmp	mon_sloop
 
 Lcea4:	ldx	#23		; bottom line of display
-	stx	Z25
+	stx	mon_cv
 	jsr	mon_vtab
 
 	lda	#$00
-	sta	Z24
+	sta	mon_ch
 	ldx	#$00
 	ldy	slot
 	lda	sh_04f8,y
