@@ -45,11 +45,14 @@ Z23	equ	$23
 Z24	equ	$24
 Z25	equ	$25
 Z26	equ	$26
+
+; address field buffer
 Z27	equ	$27
 Z28	equ	$28
 Z29	equ	$29
 Z2a	equ	$2a
 Z2b	equ	$2b
+
 Z2c	equ	$2c
 Z2d	equ	$2d
 Z39	equ	$39
@@ -63,20 +66,28 @@ Z42	equ	$42
 Z43	equ	$43
 Z4a	equ	$4a
 Z4b	equ	$4b
-Z4c	equ	$4c
-Z4d	equ	$4d
-Z50	equ	$50
+
+; CmdTab $4c..$54: command from SmartPort
+Z4c	equ	$4c	; command
+Z4d	equ	$4d	; param count
+; 4e
+; 4f
+Z50	equ	$50	; block number (ReadBlock, WriteBlock command)
 Z51	equ	$51
 Z52	equ	$52
+
 Z55	equ	$55
+
+; StatusTab
 Z56	equ	$56
-Z57	equ	$57
+Z57	equ	$57	; status
 Z58	equ	$58
 Z59	equ	$59
 Z5a	equ	$5a
 Z5b	equ	$5b
+
 Z5c	equ	$5c
-Z5e	equ	$5e
+Z5e	equ	$5e	; StatByte
 Z5f	equ	$5f
 Z60	equ	$60
 Z61	equ	$61
@@ -103,22 +114,38 @@ L7e	equ	$7e
 L81	equ	$81
 L84	equ	$84
 L87	equ	$87
+
+; mark table
 Z8d	equ	$8d
-Z8e	equ	$8e
-Z92	equ	$92
-Z97	equ	$97
-Z98	equ	$98
-Z99	equ	$99
-Z9f	equ	$9f
+mt_data	equ	$8e
+mt_sync	equ	$92	; manual says 6 bytes starting at $91, but
+			; firmware doesn't appear to use the byte at $90
+mt_slip	equ	$97
+mt_addr	equ	$9f
+
+; zero page $00c0..$00ff left free for use by downloaded code
+
+; $0100..?: firmware RW buffer #1
+
 D0100	equ	$0100
 D01af	equ	$01af
+
+; ?..$01ff: stack
+
+; $0200..$03ff: host comm buffer, format sector buffer I
 D0200	equ	$0200
-D0201	equ	$0201
-D0202	equ	$0202
-D0203	equ	$0203
-D0204	equ	$0204
+
+execute_reg_a	equ	$0200
+execute_reg_x	equ	$0201
+execute_reg_y	equ	$0202
+execute_reg_p	equ	$0203
+execute_reg_pc	equ	$0204
+
 D0300	equ	$0300
 S0340	equ	$0340
+
+; $0400..$04ff: format sector buffer II
+
 D0400	equ	$0400
 D04c2	equ	$04c2
 D04cf	equ	$04cf
@@ -127,27 +154,43 @@ D04d1	equ	$04d1
 D04d2	equ	$04d2
 D04d3	equ	$04d3
 D04d8	equ	$04d8
+
+; $0500..$05ff: left free for use by downloaded code
+
+; $0600..$06ff: firmware RW buffer #2
+
 D0640	equ	$0640
 D06ef	equ	$06ef
+
+; $0700..$07ff: firmware RW buffer #2
+
 D0740	equ	$0740
 D0741	equ	$0741
 D07ef	equ	$07ef
-D0800	equ	$0800
-D0801	equ	$0801
-D0a00	equ	$0a00
-D0a01	equ	$0a01
-D0a02	equ	$0a02
-D0a03	equ	$0a03
-D0a04	equ	$0a04
-D0a05	equ	$0a05
-D0a06	equ	$0a06
-D0a07	equ	$0a07
-D0a08	equ	$0a08
-D0a09	equ	$0a09
-D0a0c	equ	$0a0c
-D0a0d	equ	$0a0d
-D0a0e	equ	$0a0e
-D0a0f	equ	$0a0f
+
+; gate array		;	d4       d3       d2       d1       d0
+ga_reg0	equ	$0800	; read  LASTONE/ BUSEN/   WRREQ    /GATENBL HDSEL
+			; write TRIGGER  ENBUS    PH3EN    IWMDIR   HDSEL
+ga_reg1	equ	$0801	; read  SENSE    BLATCH1  BLATCH2  LIRONEN  CAO
+			; write /RSTIWM  /BLATCH  /BLATCH  DRIVE1   DRIVE2
+			;                CLR1     CLR2
+
+iwm_ph_0_off	equ	$0a00
+iwm_ph_0_on	equ	$0a01
+iwm_ph_1_off	equ	$0a02
+iwm_ph_1_on	equ	$0a03
+iwm_ph_2_off	equ	$0a04
+iwm_ph_2_on	equ	$0a05
+iwm_ph_3_off	equ	$0a06
+iwm_ph_3_on	equ	$0a07
+iwm_motor_off	equ	$0a08
+iwm_motor_on	equ	$0a09
+iwm_sel_drive_1	equ	$0a0a	; not used
+iwm_sel_drive_2	equ	$0a0b	; not used
+iwm_q6l		equ	$0a0c
+iwm_q6h		equ	$0a0d
+iwm_q7l		equ	$0a0e
+iwm_q7h		equ	$0a0f
 	
 	org	$e000
 	
@@ -198,15 +241,15 @@ Le114:	dey
 	bne	Le11b
 	dec	Z17
 	bmi	Le15c
-Le11b:	lda	D0a0e
+Le11b:	lda	iwm_q7l
 	bpl	Le11b
-	cmp	Z9f,x
+	cmp	mt_addr,x
 	bne	Le112
 	dex
 	bpl	Le114
 	ldx	#$04
 	stz	Z1e
-Le12b:	ldy	D0a0e
+Le12b:	ldy	iwm_q7l
 	bpl	Le12b
 	lda	De100,y
 	sta	Z27,x
@@ -216,13 +259,13 @@ Le12b:	ldy	D0a0e
 	bpl	Le12b
 	tay
 	bne	Le15c
-Le13f:	lda	D0a0e
+Le13f:	lda	iwm_q7l
 	bpl	Le13f
-	cmp	Z99
+	cmp	mt_slip+2
 	bne	Le15c
-Le148:	lda	D0a0e
+Le148:	lda	iwm_q7l
 	bpl	Le148
-	cmp	Z98
+	cmp	mt_slip+1
 	bne	Le15c
 	ldx	Z13
 	lda	Z28
@@ -242,8 +285,8 @@ Se162:	lda	#$01
 	bpl	Le16a
 	lda	#$03
 Le16a:	jsr	Se640
-	lda	D0a0c
-	lda	D0a0e
+	lda	iwm_q6l
+	lda	iwm_q7l
 	rts
 
 	fillto	$e196,$00
@@ -273,13 +316,13 @@ Le203:	stz	Z21
 Le20b:	ldx	#$02
 Le20d:	dey
 	beq	Le228
-Le210:	lda	D0a0e
+Le210:	lda	iwm_q7l
 	bpl	Le210
-	cmp	Z8e,x
+	cmp	mt_data,x
 	bne	Le20b
 	dex
 	bpl	Le20d
-Le21c:	ldx	D0a0e
+Le21c:	ldx	iwm_q7l
 	bpl	Le21c
 	lda	denib_tab,x
 	cmp	Z2a
@@ -287,7 +330,7 @@ Le21c:	ldx	D0a0e
 Le228:	jmp	Le2ca
 Le22b:	ldy	#$af
 	jmp	Le244
-Le230:	ldx	D0a0c
+Le230:	ldx	iwm_q6l
 	lda	denib_tab,x
 	ldx	Z23
 	ora	De080,x
@@ -295,14 +338,14 @@ Le230:	ldx	D0a0c
 	sta	D0741,y
 	adc	Z1f
 	sta	Z1f
-Le244:	ldx	D0a0c
+Le244:	ldx	iwm_q6l
 	bpl	Le244
 	lda	denib_tab,x
 	sta	Z23
 	asl	Z1f
 	bcc	Le254
 	inc	Z1f
-Le254:	ldx	D0a0c
+Le254:	ldx	iwm_q6l
 	bpl	Le254
 	lda	denib_tab,x
 	ldx	Z23
@@ -310,7 +353,7 @@ Le254:	ldx	D0a0c
 	eor	Z1f
 	sta	D0100,y
 	adc	Z21
-Le268:	ldx	D0a0c
+Le268:	ldx	iwm_q6l
 	bpl	Le268
 	sta	Z21
 	lda	denib_tab,x
@@ -322,7 +365,7 @@ Le268:	ldx	D0a0c
 	sta	Z20
 	dey
 	bne	Le230
-Le283:	ldx	D0a0c
+Le283:	ldx	iwm_q6l
 	bpl	Le283
 	ldy	denib_tab,x
 	lda	De080,y
@@ -331,7 +374,7 @@ Le283:	ldx	D0a0c
 	sta	Z24
 	lda	De000,y
 	ldy	#$02
-Le29a:	ldx	D0a0c
+Le29a:	ldx	iwm_q6l
 	bpl	Le29a
 	and	#$c0
 	ora	denib_tab,x
@@ -341,9 +384,9 @@ Le29a:	ldx	D0a0c
 	dey
 	bpl	Le29a
 	ldy	#$02
-Le2b1:	lda	D0a0c
+Le2b1:	lda	iwm_q6l
 	bpl	Le2b1
-	cmp	Z97,y
+	cmp	mt_slip,y
 	bne	Le2c4
 	dey
 	bne	Le2b1
@@ -357,7 +400,7 @@ Le2c6:	ora	Z57
 Le2ca:	sec
 	rts
 
-Le2cc:	jmp	L7e
+cmd_format:	jmp	L7e
 
 Le2cf:	sec
 	jsr	Se5f0
@@ -416,16 +459,16 @@ Le337:	jsr	Se162
 	stz	Z25
 	lda	#$04
 	sta	Z26
-	bit	D0a0d
-	sta	D0a0f
+	bit	iwm_q6h
+	sta	iwm_q7h
 	lda	#$00
 	ldx	#$c8
 	sta	Z18
 Le34e:	ldy	#$04
-Le350:	lda	Z92,y
-Le353:	bit	D0a0c
+Le350:	lda	mt_sync,y
+Le353:	bit	iwm_q6l
 	bpl	Le353
-	sta	D0a0d
+	sta	iwm_q6h
 	dey
 	bpl	Le350
 	dex
@@ -434,9 +477,9 @@ Le353:	bit	D0a0c
 	bpl	Le34e
 Le365:	ldy	#$fa
 Le367:	lda	(Z25),y
-Le369:	bit	D0a0c
+Le369:	bit	iwm_q6l
 	bpl	Le369
-	sta	D0a0d
+	sta	iwm_q6h
 	dey
 	cpy	#$ff
 	bne	Le367
@@ -449,7 +492,7 @@ Le369:	bit	D0a0c
 	cpx	Z1a
 	bcs	Le3ac
 	lda	#$ff
-	sta	D0a0d
+	sta	iwm_q6h
 	ldy	Z2d,x
 	lda	nib_tab,y
 	sta	D04d2
@@ -462,10 +505,10 @@ Le369:	bit	D0a0c
 	lda	#$04
 	sta	Z26
 	lda	#$ff
-	sta	D0a0d
+	sta	iwm_q6h
 	jmp	Le365
-Le3ac:	lda	D0a0e
-	lda	D0a0c
+Le3ac:	lda	iwm_q7l
+	lda	iwm_q6l
 	clc
 	rts
 
@@ -487,7 +530,7 @@ Le3cb:	lda	Z8d,x
 	bpl	Le3cb
 	ldx	#$22
 Le3d5:	ldy	#$04
-Le3d7:	lda	Z92,y
+Le3d7:	lda	mt_sync,y
 	sta	D04d8,x
 	dex
 	bmi	Le3e5
@@ -495,7 +538,7 @@ Le3d7:	lda	Z92,y
 	bpl	Le3d7
 	bmi	Le3d5
 Le3e5:	ldx	#$02
-Le3e7:	lda	Z97,x
+Le3e7:	lda	mt_slip,x
 	sta	D0200,x
 	dex
 	bpl	Le3e7
@@ -710,32 +753,32 @@ Le568:	clc
 
 Se56a:	lda	#$0b
 	jsr	Se640
-Le56f:	bit	D0a0e
+Le56f:	bit	iwm_q7l
 	bmi	Le56f
 	lda	Z09
 	and	#$ef
-	sta	D0800
+	sta	ga_reg0
 	lda	Z09
-	sta	D0800
+	sta	ga_reg0
 	rts
 
 Le581:	jsr	Se640
-Le584:	bit	D0a0e
+Le584:	bit	iwm_q7l
 	bpl	Le584
 	rts
 
 Le58a:	lda	#$1f
 
 Se58c:	tay
-	lda	D0a08
-	lda	D0a0d
-Le593:	sty	D0a0f
+	lda	iwm_motor_off
+	lda	iwm_q6h
+Le593:	sty	iwm_q7h
 	tya
-	eor	D0a0e
+	eor	iwm_q7l
 	and	#$1f
 	bne	Le593
-	lda	D0a0c
-	lda	D0a09
+	lda	iwm_q6l
+	lda	iwm_motor_on
 	rts
 
 Se5a5:	ldx	#$07
@@ -755,7 +798,7 @@ Le5b5:	dex
 De5bb:	fcb	$4c,$49,$52,$4f,$4e,$4d,$53,$41	; "LIRONMSA"
 
 
-Se5c3:	lda	D0801
+Se5c3:	lda	ga_reg1
 	and	#$0c
 	beq	Le5ed
 	ldx	#$00
@@ -828,22 +871,22 @@ Le63d:	jmp	Se67c
 
 Se640:	jsr	Se654
 
-Se643:	bit	D0a0d
-	lda	D0a0e
+Se643:	bit	iwm_q6h
+	lda	iwm_q7l
 	rts
 
 Se64a:	jsr	Se654
 
-Se64d:	bit	D0a07
-	bit	D0a06
+Se64d:	bit	iwm_ph_3_on
+	bit	iwm_ph_3_off
 	rts
 
-Se654:	bit	D0a01
-	bit	D0a03
-	bit	D0a04
+Se654:	bit	iwm_ph_0_on
+	bit	iwm_ph_1_on
+	bit	iwm_ph_2_off
 	lsr
 	bcc	Le663
-	bit	D0a05
+	bit	iwm_ph_2_on
 Le663:	lsr
 	pha
 	lda	#$01
@@ -853,10 +896,10 @@ Le66b:	jsr	Se67c
 	pla
 	lsr
 	bcs	Le675
-	bit	D0a00
+	bit	iwm_ph_0_off
 Le675:	lsr
 	bcs	Le67b
-	bit	D0a02
+	bit	iwm_ph_1_off
 Le67b:	rts
 
 Se67c:	phx
@@ -877,7 +920,7 @@ Le684:	pha
 	lsr
 	ora	Z09,x
 	sta	Z09,x
-	sta	D0800,x
+	sta	ga_reg0,x
 	plx
 	rts
 
@@ -956,9 +999,9 @@ Le73e:	lda	#$00
 	inc
 Le747:	tax
 	lda	Z50
-	cmp	De75d,x
+	cmp	block_count_low_tab,x
 	lda	Z51
-	sbc	De75d+2,x
+	sbc	block_count_high_tab,x
 	lda	Z52
 	sbc	#$00
 	bcc	Le75c
@@ -967,14 +1010,17 @@ Le747:	tax
 Le75c:	rts
 
 
-De75d:	jsr	S0340
-	fcb	$06	; ASL opcode
+block_count_low_tab:
+	fcb	800 & $ff, 1600 & $ff
+block_count_high_tab:
+	fcb	800 >> 8, 1600 >> 8
 
 	
-reset:	sei
+reset:	sei		; disable interrupts, clear decimal, init stack
 	cld
 	ldx	#$ff
 	txs
+
 	jsr	Se7c5
 	jsr	Se7bc
 	stz	Z6a
@@ -1020,12 +1066,12 @@ Se7bc:	lda	#$04
 
 Se7c5:	lda	#$10
 	sta	Z09
-	sta	D0800
+	sta	ga_reg0
 	lda	#$00
-	sta	D0801
+	sta	ga_reg1
 	lda	#$1c
 	sta	Z0a
-	sta	D0801
+	sta	ga_reg1
 	rts
 
 Se7d9:	ldx	#ram_vec_tab_len - 1
@@ -1046,14 +1092,14 @@ Le7e5:	lda	ram_data_tab,x
 
 ram_vec_tab:
 	fcb	$1b,$00
-	jmp	Le106
-	jmp	Le203
-	jmp	Lef03
-	jmp	Le492
-	jmp	Le2cf
-	jmp	Le317
-	jmp	Le464
-	jmp	Le825
+	jmp	Le106		; rd_addr
+	jmp	Le203		; read_data
+	jmp	Lef03		; write_data
+	jmp	Le492		; seek
+	jmp	Le2cf		; format
+	jmp	Le317		; write_trk
+	jmp	Le464		; verify
+	jmp	Le825		; vector
 	rts
 	nop
 	nop
@@ -1061,9 +1107,14 @@ ram_vec_tab_len	equ	*-ram_vec_tab
 
 
 ram_data_tab:
-	fcb	$ff,$ad,$aa,$d5,$ff,$fc,$f3,$cf
-	fcb	$3f,$ff,$ff,$aa,$de,$ff,$ff,$ff
-	fcb	$ff,$ff,$96,$aa,$d5,$ff
+	fcb	$ff
+	fcb	$ad,$aa,$d5		; mt_data: data mark
+	fcb	$ff
+	fcb	$fc,$f3,$cf,$3f,$ff	; mt_sync: data sync
+	fcb	$ff,$aa,$de		; mt_slip: bit slip
+	fcb	$ff,$ff,$ff,$ff,$ff
+	fcb	$96,$aa,$d5		; mt_addr: address mark
+	fcb	$ff
 ram_data_tab_len	equ	*-ram_data_tab
 
 
@@ -1089,56 +1140,76 @@ Le844:	stz	Z3f
 	stz	Z40
 	lda	#$80
 	sta	Z5e
-	lda	Z4c
-	cmp	#$0a
-	bcc	Le857
-Le852:	lda	#$81
+
+	lda	Z4c		; get command
+	cmp	#$0a		; out of range
+	bcc	Le857		;   no
+
+cmd_bad:
+	lda	#$81
 	sta	Z5e
 	rts
-Le857:	tax
-	lda	De892,x
+
+Le857:	tax			; get expected arg count
+	lda	expected_param_count_tab,x
 	and	#$7f
-	cmp	Z4d
+	cmp	Z4d		; does it match what we've received from host?
 	beq	Le872
-	lda	De892,x
+
+; arg count different than expected
+	lda	expected_param_count_tab,x
 	bpl	Le86d
 	lda	#$00
 	ldx	#$e0
 	jsr	Sed01
+
 Le86d:	lda	#$84
 	sta	Z5e
 	rts
 
+; dispatch command
 Le872:	txa
 	asl
 	tax
-	lda	De87e+1,x
+	lda	cmd_tab+1,x
 	pha
-	lda	De87e,x
+	lda	cmd_tab,x
 	pha
 Le87d:	rts
 
 
-De87e:	fdb	Led46-1
-	fdb	Le89c-1
-	fdb	Le89f-1
-	fdb	Le2cc-1
-	fdb	Lecc5-1
-	fdb	Le947-1
-	fdb	Le852-1
-	fdb	Le852-1
-	fdb	Le96e-1
-	fdb	Le987-1
+cmd_tab:
+	fdb	cmd_status-1		; Status
+	fdb	cmd_read_block-1	; ReadBlock
+	fdb	cmd_write_block-1	; WriteBlock
+	fdb	cmd_format-1		; Format
+	fdb	cmd_control-1	; Control
+	fdb	Le947-1	; Init
+	fdb	cmd_bad-1	; Open
+	fdb	cmd_bad-1	; Close
+	fdb	Le96e-1	; Read
+	fdb	Le987-1	; Write
 
 
-De892:	fcb	$03,$03,$83,$01,$83,$02,$01,$01
-	fcb	$04,$84
+; expected parameter count by command
+; MSB indicates whether host sends data to drive
+expected_param_count_tab:
+	fcb	$03	; Status
+	fcb	$03	; ReadBlock
+	fcb	$83	; WriteBlock
+	fcb	$01	; Format
+	fcb	$83	; Control
+	fcb	$02	; Init
+	fcb	$01	; Open
+	fcb	$01	; Close
+	fcb	$04	; Read
+	fcb	$84	; Write
 
 
-Le89c:	clc
+cmd_read_block:	clc
 	bra	Le8b2
 
-Le89f:	ldx	#$0b
+cmd_write_block:	ldx	#$0b
 Le8a1:	stz	D0200,x
 	dex
 	bpl	Le8a1
@@ -1239,7 +1310,7 @@ Le95a:	sty	Z0c
 Le95e:	dec	Z3d
 	bne	Le96d
 	lda	#$10
-	bit	D0800
+	bit	ga_reg0
 	beq	Le96d
 	lda	#$c0
 	sta	Z5e
@@ -1248,7 +1319,7 @@ Le96d:	rts
 Le96e:	jsr	Se998
 	lda	#$01
 	sta	Z4c
-	jsr	Le89c
+	jsr	cmd_read_block
 	bcs	Le986
 	lda	#$00
 	sta	Z25
@@ -1376,8 +1447,8 @@ Lea5f:	jsr	Seae4
 	jsr	Seae4
 	cmp	Z19
 	beq	Lea74
-Lea69:	lda	D0a0d
-Lea6c:	lda	D0a0e
+Lea69:	lda	iwm_q6h
+Lea6c:	lda	iwm_q7l
 	bmi	Lea6c
 	jmp	Lea39
 Lea74:	jsr	Seae4
@@ -1395,11 +1466,11 @@ Lea74:	jsr	Seae4
 	dec	Z18
 	beq	Leabb
 Lea94:	ldx	#$07
-Lea96:	lda	D0a0c
+Lea96:	lda	iwm_q6l
 	bpl	Lea96
 	asl
 	sta	Z17
-Lea9e:	lda	D0a0c
+Lea9e:	lda	iwm_q6l
 	bpl	Lea9e
 	asl	Z17
 	bcs	Leaa9
@@ -1425,16 +1496,16 @@ Leabb:	jsr	Seaf0
 	jsr	Seaf0
 	cmp	#$c8
 	bne	Leafd
-	lda	D0a00
+	lda	iwm_ph_0_off
 	lda	#$88
 	jsr	Se67c
-	lda	D0a0d
-Leadd:	lda	D0a0e
+	lda	iwm_q6h
+Leadd:	lda	iwm_q7l
 	bmi	Leadd
 	clc
 	rts
 
-Seae4:	lda	D0a0c
+Seae4:	lda	iwm_q6l
 	bpl	Seae4
 	pha
 	eor	Z1e
@@ -1444,7 +1515,7 @@ Seae4:	lda	D0a0c
 
 Seaf0:	ldy	#$14
 	clc
-Leaf3:	lda	D0a0c
+Leaf3:	lda	iwm_q6l
 	bmi	Leafc
 	dey
 	bne	Leaf3
@@ -1462,12 +1533,12 @@ Leb0c:	jsr	Sec3a
 	jsr	Sec84
 	jsr	Seca4
 	jsr	Sebfd
-	lda	D0a01
+	lda	iwm_ph_0_on
 	jsr	Sec25
 	bcs	Leafc
 	lda	#$ff
-	bit	D0a0d
-	sta	D0a0f
+	bit	iwm_q6h
+	sta	iwm_q7h
 	ldy	#$0a
 Leb2a:	lda	Debe1,y
 	jsr	Sebf2
@@ -1504,18 +1575,18 @@ Leb6f:	lda	Z18
 	ldy	#$00
 Leb75:	lda	Z17
 	ora	#$80
-Leb79:	bit	D0a0c
+Leb79:	bit	iwm_q6l
 	bpl	Leb79
-	sta	D0a0d
+	sta	iwm_q6h
 	ldx	#$06
 Leb83:	lda	Z43,x
 	eor	Z1e
 	sta	Z1e
 	lda	Z43,x
 	ora	#$80
-Leb8d:	bit	D0a0c
+Leb8d:	bit	iwm_q6l
 	bpl	Leb8d
-	sta	D0a0d
+	sta	iwm_q6h
 	lda	(Z41),y
 	sta	Z43,x
 	asl
@@ -1536,20 +1607,20 @@ Leba8:	lda	Z1e
 	jsr	Sebf2
 	lda	#$c8
 	jsr	Sebf2
-Lebbc:	lda	D0a0c
+Lebbc:	lda	iwm_q6l
 	and	#$40
 	bne	Lebbc
-	lda	D0a00
-	lda	D0a0e
-	lda	D0a0d
+	lda	iwm_ph_0_off
+	lda	iwm_q7l
+	lda	iwm_q6h
 	clc
 	ldx	#$64
 Lebcf:	dex
 	bne	Lebd3
 	sec
-Lebd3:	lda	D0a0e
+Lebd3:	lda	iwm_q7l
 	bmi	Lebcf
-	lda	D0a0c
+	lda	iwm_q6l
 	bcc	Lebe0
 	jmp	Leb0c
 Lebe0:	rts
@@ -1565,9 +1636,9 @@ Sebec:	pha
 	pla
 
 Sebf2:	ora	#$80
-Lebf4:	bit	D0a0c
+Lebf4:	bit	iwm_q6l
 	bpl	Lebf4
-	sta	D0a0d
+	sta	iwm_q6h
 	rts
 
 Sebfd:	lda	#$22
@@ -1585,16 +1656,16 @@ Lec13:	inc	Z6a
 	bne	Lec19
 	inc	Z6b
 Lec19:	jsr	Se5c3
-	lda	D0a0d
-	lda	D0a0e
+	lda	iwm_q6h
+	lda	iwm_q7l
 	bpl	Sec08
 	rts
 
 Sec25:	ldx	#$00
 	ldy	#$14
 Lec29:	clc
-	lda	D0a0d
-	lda	D0a0e
+	lda	iwm_q6h
+	lda	iwm_q7l
 	bmi	Lec39
 	sec
 	inx
@@ -1680,37 +1751,44 @@ Lecb0:	ror	Z17
 	inc	Z42
 Lecc4:	rts
 
-Lecc5:	lda	Z50
+
+cmd_control:
+	lda	Z50
 	cmp	#$08
 	bcc	Lecd0
 
 Leccb:	lda	#$a1
 	sta	Z5e
 	rts
+
 Lecd0:	asl
 	tax
-	lda	Decdb+1,x
+	lda	control_tab+1,x
 	pha
-	lda	Decdb,x
+	lda	control_tab,x
 	pha
 	rts
 
 
-Decdb:	fdb	Lecf1-1
+; control function dispatch table
+control_tab:
+	fdb	Lecf1-1
 	fdb	Leceb-1
 	fdb	Leceb-1
 	fdb	Leceb-1
-	fdb	Lecf7-1
-	fdb	Led0f-1
-	fdb	Led38-1
-	fdb	Led31-1
+	fdb	control_eject-1		; Eject
+	fdb	control_execute-1	; Execute
+	fdb	control_set_address-1	; SetAddress
+	fdb	control_download-1	; Download
 
 
 Leceb:	jsr	Secfd
 	jmp	Leccb
 Lecf1:	jmp	Se7d9
 	jmp	Secfd
-Lecf7:	jsr	Secfd
+
+control_eject:
+	jsr	Secfd
 	jmp	Se51b
 
 
@@ -1724,12 +1802,13 @@ Sed01:	sta	Z25
 	jsr	Sea29
 	jmp	Se9ce
 
-Led0f:	jsr	Secfd
-	lda	D0203
+control_execute:
+	jsr	Secfd
+	lda	execute_reg_p
 	pha
-	lda	D0200
-	ldx	D0201
-	ldy	D0202
+	lda	execute_reg_a
+	ldx	execute_reg_x
+	ldy	execute_reg_y
 	plp
 	jsr	Sed2e
 	php
@@ -1740,20 +1819,26 @@ Led0f:	jsr	Secfd
 	sta	Z5c
 	rts
 
-Sed2e:	jmp	(D0204)
+Sed2e:	jmp	(execute_reg_pc)
 
-Led31:	lda	Z64
+
+control_download:
+	lda	Z64
 	ldx	Z65
 	jmp	Sed01
 
-Led38:	jsr	Secfd
-	lda	D0200
+
+control_set_address:
+	jsr	Secfd
+	lda	execute_reg_a
 	sta	Z64
-	lda	D0201
+	lda	execute_reg_x
 	sta	Z65
 	rts
 
-Led46:	lda	#$00
+
+cmd_status:
+	lda	#$00
 	sta	Z25
 	lda	#$02
 	sta	Z26
@@ -1761,6 +1846,7 @@ Led46:	lda	#$00
 	cmp	#$06
 	bcc	Led57
 	jmp	Leccb
+
 
 Led57:	asl
 	tax
@@ -1782,7 +1868,7 @@ Ded62:	fdb	Leda3-1
 Led6e:	jsr	Leda3
 	ldx	#$14
 Led73:	lda	Ded81,x
-	sta	D0204,x
+	sta	execute_reg_pc,x
 	dex
 	bpl	Led73
 	lda	#$19
@@ -1825,9 +1911,9 @@ Ledbb:	sta	D0200
 	bmi	Ledcc
 	lda	#$20
 	ldy	#$03
-Ledcc:	sta	D0201
-	sty	D0202
-	stz	D0203
+Ledcc:	sta	execute_reg_x
+	sty	execute_reg_y
+	stz	execute_reg_p
 	lda	#$04
 	sta	Z3f
 	rts
@@ -1849,14 +1935,14 @@ nib_tab:
 
 Sef00:	jmp	L78
 
-Lef03:	bit	D0a0d
+Lef03:	bit	iwm_q6h
 	lda	#$ff
-	sta	D0a0f
+	sta	iwm_q7h
 	ldx	#$07
-Lef0d:	lda	Z8e,x
-Lef0f:	bit	D0a0c
+Lef0d:	lda	mt_data,x
+Lef0f:	bit	iwm_q6l
 	bpl	Lef0f
-	sta	D0a0d
+	sta	iwm_q6h
 	dex
 	bpl	Lef0d
 	ldy	Z2a
@@ -1872,12 +1958,12 @@ Lef26:	ldy	Z69
 	asl
 	rol	Z66
 	lda	nib_tab,y
-	sta	D0a0d
+	sta	iwm_q6h
 Lef39:	ldy	Z66
 	lda	nib_tab,y
-Lef3e:	bit	D0a0c
+Lef3e:	bit	iwm_q6l
 	bpl	Lef3e
-	sta	D0a0d
+	sta	iwm_q6h
 	ldy	Z67
 	lda	D0100,x
 	sta	Z67
@@ -1886,7 +1972,7 @@ Lef3e:	bit	D0a0c
 	asl
 	rol	Z66
 	lda	nib_tab,y
-	sta	D0a0d
+	sta	iwm_q6h
 	ldy	Z68
 	lda	D0640,x
 	sta	Z68
@@ -1895,7 +1981,7 @@ Lef3e:	bit	D0a0c
 	asl
 	rol	Z66
 	lda	nib_tab,y
-	sta	D0a0d
+	sta	iwm_q6h
 	dex
 	cpx	#$ff
 	bne	Lef26
@@ -1904,21 +1990,21 @@ Lef73:	lda	Z1f,x
 	and	#$3f
 	tay
 	lda	nib_tab,y
-Lef7b:	bit	D0a0c
+Lef7b:	bit	iwm_q6l
 	bpl	Lef7b
-	sta	D0a0d
+	sta	iwm_q6h
 	dex
 	bpl	Lef73
 	ldx	#$02
-Lef88:	lda	Z97,x
-Lef8a:	bit	D0a0c
+Lef88:	lda	mt_slip,x
+Lef8a:	bit	iwm_q6l
 	bpl	Lef8a
-	sta	D0a0d
+	sta	iwm_q6h
 	dex
 	bpl	Lef88
-Lef95:	bit	D0a0c
+Lef95:	bit	iwm_q6l
 	bvs	Lef95
-	bit	D0a0e
+	bit	iwm_q7l
 	rts
 
 Lef9e:	stz	Z21
@@ -2004,7 +2090,7 @@ Lf027:	jsr	Se9ce
 	sta	Z26
 	stz	Z25
 	ldy	#$00
-Lf03b:	lda	D0a0c
+Lf03b:	lda	iwm_q6l
 	bpl	Lf03b
 	sta	(Z25),y
 	inc	Z25
@@ -2137,7 +2223,7 @@ Lf124:	nop
 	nop
 Lf126:	dec	Z1c
 	beq	Lf143
-	bit	D0a0e
+	bit	iwm_q7l
 	bcc	Lf133
 	bmi	Lf135
 	bpl	Lf117
@@ -2177,16 +2263,16 @@ Sf169:	jsr	Se56a
 	ldy	#$27
 	ldx	#$10
 	lda	Z4b
-	sta	D0a0f
-Lf178:	bit	D0a0c
+	sta	iwm_q7h
+Lf178:	bit	iwm_q6l
 	bpl	Lf178
-	sta	D0a0d
+	sta	iwm_q6h
 	dex
 	bne	Lf178
 	dey
 	bne	Lf178
-	bit	D0a0c
-	bit	D0a0e
+	bit	iwm_q6l
+	bit	iwm_q7l
 	rts
 
 Lf18d:	jsr	Le4f7
@@ -2214,8 +2300,8 @@ Lf18d:	jsr	Le4f7
 	jmp	Le48d
 	jmp	Le69b
 	jmp	Se6e0
-	jmp	Le89c
-	jmp	Le89f
+	jmp	cmd_read_block
+	jmp	cmd_write_block
 	jmp	Se9ce
 	jmp	Se9ea
 	jmp	Lf148
