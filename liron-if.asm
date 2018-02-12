@@ -62,23 +62,30 @@ Z5b		equ	$5b
 
 ; per-slot screen holes (index by slot)
 sh_prodos_flag	equ	$0478	; MSB = 1 for ProDOS, 0 for SmartPort
-sh_04f8	equ	$04f8
-sh_0578	equ	$0578
-sh_05f8	equ	$05f8
-sh_0678	equ	$0678
-sh_06f8	equ	$06f8
-sh_0778	equ	$0778
-sh_07f8	equ	$07f8
+sh_04f8		equ	$04f8
+sh_0578		equ	$0578
+sh_05f8		equ	$05f8
+sh_0678		equ	$0678
+sh_magic1	equ	$06f8	; $a5 if firmware initialized
+sh_magic2	equ	$0778	; $5a if firmware initialized
+sh_07f8		equ	$07f8
 
 
-; global screen holes
-gh_06f8	equ	$06f8
-gh_0778	equ	$0778
-gh_shared_rom_slot	equ	$07f8
+; global screen holes - undocumented
+; these seem to be used as temporaries
+gh_06f8		equ	$06f8
+; note - 06f8 is used by Apple DOS RWTS for RECLBCNT (recal counter),
+;        not needed between RWTS calls
+
+gh_0778		equ	$0778
+
+; global screen holes - documented
+gh_shared_slot	equ	$07f8	; $Cn if card in slot n $c800 ROM active
+				; needed for interrupt handling
 
 
-D0800	equ	$0800
-L0801	equ	$0801
+D0800		equ	$0800
+L0801		equ	$0801
 
 
 basic_cold	equ	$e000
@@ -151,7 +158,7 @@ Lcn0e:	ldx	#slotnum
 ; combined ProDOS/SmartPort/boot dispatch
 ; carry = 1 for boot, 0 for ProDOS/SmartPort
 Lcn14:	ldx	#$c0 + slotnum
-	stx	gh_shared_rom_slot
+	stx	gh_shared_slot
 	ldx	#slotnum
 	lda	rom_dis
 	jmp	shared_rom_entry
@@ -891,12 +898,14 @@ Lcc03:	lda	Z40,x
 	dex
 	bpl	Lcc03
 	sty	slot
-	lda	sh_06f8,y
+
+	lda	sh_magic1,y	; has card been initialized?
 	cmp	#$a5
 	bne	Lcc19
 	eor	#$ff
-	eor	sh_0778,y
+	eor	sh_magic2,y
 	beq	Lcc1e
+
 Lcc19:	lda	#$00
 	jsr	Scded
 
@@ -1202,10 +1211,12 @@ Lce34:	lda	Z5a
 	sta	prodos_unit_num
 	pla
 	sta	prodos_command
-	lda	#$a5
-	sta	sh_06f8,y
+
+	lda	#$a5		; mark firmware as initialized
+	sta	sh_magic1,y
 	eor	#$ff
-	sta	sh_0778,y
+	sta	sh_magic2,y
+
 	rts
 
 Sce4f:	ldx	slot
@@ -1218,7 +1229,7 @@ Sce4f:	ldx	slot
 boot:	stx	slot
 	lda	#$aa
 	sta	sh_prodos_flag,x	; sets MSB, to indicate use of ProDOS protocol
-	sta	sh_06f8,x
+	sta	sh_magic1,x		; mark firmware not initialized
 
 ; copy boot_prodos_command_block into zero page for use
 	ldy	#boot_prodos_command_block_len - 1
@@ -1258,7 +1269,7 @@ boot_error:
 	ldx	Z00
 	bne	Lcea4
 	ldx	Z01
-	cpx	gh_shared_rom_slot
+	cpx	gh_shared_slot
 	bne	Lcea4
 	jmp	mon_sloop
 
