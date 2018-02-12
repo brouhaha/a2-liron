@@ -16,8 +16,10 @@ size	set	256
 
 L00	equ	$00
 Z08	equ	$08
-Z09	equ	$09
-Z0a	equ	$0a
+
+ga_shadow_wr_reg0	equ	$09
+ga_shadow_wr_reg1	equ	$0a
+
 Z0b	equ	$0b
 Z0c	equ	$0c
 Z0d	equ	$0d
@@ -174,6 +176,9 @@ ga_reg0	equ	$0800	; read  LASTONE/ BUSEN/   WRREQ    /GATENBL HDSEL
 ga_reg1	equ	$0801	; read  SENSE    BLATCH1  BLATCH2  LIRONEN  CAO
 			; write /RSTIWM  /BLATCH  /BLATCH  DRIVE1   DRIVE2
 			;                CLR1     CLR2
+
+; IWMDIR = 0, IWM is connected to 3.5" drive mechanism
+; IWMDIR = 1, IWM is connected to SmartPort (ph_0 used for /BSY handshake)
 
 iwm_ph_0_off	equ	$0a00
 iwm_ph_0_on	equ	$0a01
@@ -755,10 +760,11 @@ Se56a:	lda	#$0b
 	jsr	Se640
 Le56f:	bit	iwm_q7l
 	bmi	Le56f
-	lda	Z09
+
+	lda	ga_shadow_wr_reg0	; pulse TRIGGER
 	and	#$ef
 	sta	ga_reg0
-	lda	Z09
+	lda	ga_shadow_wr_reg0
 	sta	ga_reg0
 	rts
 
@@ -798,9 +804,10 @@ Le5b5:	dex
 De5bb:	fcb	$4c,$49,$52,$4f,$4e,$4d,$53,$41	; "LIRONMSA"
 
 
-Se5c3:	lda	ga_reg1
+Se5c3:	lda	ga_reg1		; check BLATCH1 and 2
 	and	#$0c
 	beq	Le5ed
+
 	ldx	#$00
 	cmp	#$08
 	beq	Le5d1
@@ -911,15 +918,15 @@ Se681:	phx
 Le684:	pha
 	eor	#$0f
 	ora	#$f0
-	and	Z09,x
-	sta	Z09,x
+	and	ga_shadow_wr_reg0,x
+	sta	ga_shadow_wr_reg0,x
 	pla
 	lsr
 	lsr
 	lsr
 	lsr
-	ora	Z09,x
-	sta	Z09,x
+	ora	ga_shadow_wr_reg0,x
+	sta	ga_shadow_wr_reg0,x
 	sta	ga_reg0,x
 	plx
 	rts
@@ -1021,7 +1028,7 @@ reset:	sei		; disable interrupts, clear decimal, init stack
 	ldx	#$ff
 	txs
 
-	jsr	Se7c5
+	jsr	ga_init
 	jsr	Se7bc
 	stz	Z6a
 	stz	Z6b
@@ -1033,7 +1040,7 @@ reset:	sei		; disable interrupts, clear decimal, init stack
 	lda	#$fa
 	sta	Z11
 	sta	Z12
-	jsr	Se7d9
+	jsr	vector_init
 	lda	#$e6
 	jsr	Se4e7
 	jsr	Se9ef
@@ -1064,17 +1071,23 @@ Se7bc:	lda	#$04
 	sta	Z63
 	rts
 
-Se7c5:	lda	#$10
-	sta	Z09
+
+ga_init:
+	lda	#$10
+	sta	ga_shadow_wr_reg0
 	sta	ga_reg0
-	lda	#$00
+
+	lda	#$00		; reset IWM, clear BLATCH1, BLATCH2
 	sta	ga_reg1
+
 	lda	#$1c
-	sta	Z0a
+	sta	ga_shadow_wr_reg1
 	sta	ga_reg1
 	rts
 
-Se7d9:	ldx	#ram_vec_tab_len - 1
+
+vector_init:
+	ldx	#ram_vec_tab_len - 1
 Le7db:	lda	ram_vec_tab,x
 	sta	Z70,x
 	dex
@@ -1309,9 +1322,11 @@ Le95a:	sty	Z0c
 	inc	Z13
 Le95e:	dec	Z3d
 	bne	Le96d
-	lda	#$10
+
+	lda	#$10		; check LASTONE/
 	bit	ga_reg0
 	beq	Le96d
+
 	lda	#$c0
 	sta	Z5e
 Le96d:	rts
@@ -1772,19 +1787,23 @@ Lecd0:	asl
 
 ; control function dispatch table
 control_tab:
-	fdb	Lecf1-1
-	fdb	Leceb-1
-	fdb	Leceb-1
-	fdb	Leceb-1
+	fdb	control_reset-1		; Reset device
+	fdb	control_bad-1		; set device control block
+	fdb	control_bad-1		; set newline status
+	fdb	control_bad-1		; service device interrupt
 	fdb	control_eject-1		; Eject
 	fdb	control_execute-1	; Execute
 	fdb	control_set_address-1	; SetAddress
 	fdb	control_download-1	; Download
 
 
-Leceb:	jsr	Secfd
+control_bad:
+	jsr	Secfd
 	jmp	Leccb
-Lecf1:	jmp	Se7d9
+
+controL_reset:
+	jmp	vector_init
+
 	jmp	Secfd
 
 control_eject:
@@ -1857,12 +1876,12 @@ Led57:	asl
 	rts
 
 
-Ded62:	fdb	Leda3-1
+Ded62:	fdb	Leda3-1		; device status
+	fdb	Leccb-1		; device control block
+	fdb	Leccb-1		; newline status
+	fdb	Led6e-1		; device information block
 	fdb	Leccb-1
-	fdb	Leccb-1
-	fdb	Led6e-1
-	fdb	Leccb-1
-	fdb	Led96-1
+	fdb	Led96-1		; UniDiskStat
 
 
 Led6e:	jsr	Leda3
