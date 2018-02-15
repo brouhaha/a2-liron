@@ -22,6 +22,19 @@ fcchz	macro	string
 	endm
 
 
+; SmartPort bus commands
+sp_cmd_status	equ	$00
+sp_cmd_readblk	equ	$01	; block device only
+sp_cmd_writeblk	equ	$02	; block device only
+sp_cmd_format	equ	$03	; block device only
+sp_cmd_control	equ	$04
+sp_cmd_init	equ	$05	; used to assign unit number
+sp_cmd_open	equ	$06	; character device only
+sp_cmd_close	equ	$07	; character device only
+sp_cmd_read	equ	$08	; character device only
+sp_cmd_write	equ	$09	; character device only
+
+
 Z00		equ	$00
 Z01		equ	$01
 
@@ -68,7 +81,7 @@ sh_05f8		equ	$05f8
 sh_0678		equ	$0678
 sh_magic1	equ	$06f8	; $a5 if firmware initialized
 sh_magic2	equ	$0778	; $5a if firmware initialized
-sh_07f8		equ	$07f8
+unit_count		equ	$07f8
 
 
 ; global screen holes - undocumented
@@ -602,15 +615,16 @@ send_nib7:
 	rts
 
 
-Sc9e5:	jsr	smartport_bus_disable
+reset_smartport_bus:
+	jsr	smartport_bus_disable
 	lda	iwm_ph_0_on,x
 	lda	iwm_ph_2_on,x
 
-	ldy	#$50
+	ldy	#80		; delay 80ms
 	jsr	delay_y_ms
 
 	jsr	smartport_bus_disable
-	ldy	#$0a
+	ldy	#10		; delay 10ms and return
 
 delay_y_ms:
 	jsr	delay_1ms
@@ -619,7 +633,7 @@ delay_y_ms:
 	rts
 
 delay_1ms:
-	ldx	#$c8
+	ldx	#200
 delay_1ms_loop:
 	dex
 	bne	delay_1ms_loop
@@ -719,7 +733,7 @@ Scabd:	ldy	slot
 Lcac4:	jsr	Sc960
 	bcc	Lcad8
 
-	ldy	#$01
+	ldy	#1
 	jsr	delay_y_ms
 
 	jsr	Sc93d
@@ -882,7 +896,7 @@ execute_command:
 	lda	sh_prodos_flag,y		; ProDOS or SmartPort?
 	bmi	Lcbff
 
-; SmartPort
+; SmartPort only
 	pla			; save ptr to SmartPort cmd num (offset 1)
 	sta	sh_05f8,y
 
@@ -899,14 +913,17 @@ execute_command:
 	txa
 	pha
 
-; ProDOS
+; continue here whether SmartPort or ProDOS
 Lcbff:	php
 	sei
+
+; save zero page $40..$5b onto stack
 	ldx	#$1b
 Lcc03:	lda	Z40,x
 	pha
 	dex
 	bpl	Lcc03
+
 	sty	slot
 
 	lda	sh_magic1,y	; has card been initialized?
@@ -1001,7 +1018,7 @@ Lcc92:	txa
 Lcca0:	sta	(prodos_buffer),y
 	dey
 	bne	Lcca0
-	lda	sh_07f8,x
+	lda	unit_count,x
 	sta	(prodos_buffer),y
 	iny
 	lda	#$00
@@ -1026,7 +1043,7 @@ Lcccb:	lda	#$1f
 ; ProDOS
 Lcccf:	lda	#$28
 	ldy	slot
-	ldx	sh_07f8,y
+	ldx	unit_count,y
 	cpx	prodos_unit_num
 	bcc	Lccc5
 
@@ -1127,37 +1144,49 @@ Lcd73:	jsr	Scabd
 	sta	sh_05f8,x
 	lda	prodos_block+1
 	sta	sh_0678,x
+
 	lda	prodos_buffer+1
 	and	#$10
 	bne	Lcd9d
+
 	lda	#$2f
 	bne	Lcd9f
+
 Lcd9d:	lda	Z4d
 Lcd9f:	ldy	slot
 	sta	sh_04f8,y
 	tax
 	beq	Lcdc1
+
 	ldx	sh_prodos_flag,y	; ProDOS or SmartPort?
 	bpl	Lcdc1
+
 	ldx	#$00
 	cmp	#$40
 	bcs	Lcdc0
+
 	ldx	#$27
 	cmp	#$2b
 	beq	Lcdc1
+
 	cmp	#$28
 	beq	Lcdc1
+
 	cmp	#$2f
 	beq	Lcdc1
+
 Lcdc0:	txa
 Lcdc1:	ldy	slot
 	sta	sh_0578,y
+
+; restore zero page $40..$5b from stack
 	ldx	#$00
 Lcdc8:	pla
 	sta	Z40,x
 	inx
 	cpx	#$1c
 	bcc	Lcdc8
+
 	plp
 	lda	sh_05f8,y
 	tax
@@ -1177,17 +1206,20 @@ Dcde3:	fcb	$03,$03,$83,$01,$83,$01,$01,$01
 
 
 Scded:	pha
-	jsr	Sc9e5
+	jsr	reset_smartport_bus
 	pla
 	tax
+
 	lda	prodos_command
 	pha
 	lda	prodos_unit_num
 	pha
 	lda	prodos_block
 	pha
+
 	stx	prodos_block
-	lda	#$05
+
+	lda	#sp_cmd_init
 	sta	prodos_command
 	lda	#$00
 	sta	Z5a
@@ -1200,21 +1232,26 @@ Scded:	pha
 	lda	#$80
 	sta	Z5b
 	jsr	smartport_bus_disable
+
 Lce19:	inc	Z5a
 	lda	#$09
 	sta	Z4d
 	lda	#$00
 	sta	Z4e
-	jsr	Sc800
+	jsr	Sc800	; send init command
 	bcc	Lce2d
+
 	dec	Z5a
 	jmp	Lce34
+
 Lce2d:	jsr	Sc960
 	lda	Z4d
 	beq	Lce19
+
 Lce34:	lda	Z5a
 	ldy	slot
-	sta	sh_07f8,y
+	sta	unit_count,y
+
 	pla
 	sta	prodos_block
 	pla
@@ -1228,6 +1265,7 @@ Lce34:	lda	Z5a
 	sta	sh_magic2,y
 
 	rts
+
 
 Sce4f:	ldx	slot
 	sta	sh_05f8,x
