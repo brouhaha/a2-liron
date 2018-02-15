@@ -177,7 +177,7 @@ Lcn14:	ldx	#$c0 + slotnum
 	jmp	shared_rom_entry
 
 
-; shared ROM space jumps here
+; continuation of Sc960 subroutine (in shared ROM)
 Lcn21:	ldy	#$00
 	lda	Z4b
 	pha
@@ -319,16 +319,25 @@ Lcnf8:	sec
 
 	endm
 
-Sc800:	jsr	Scaee
+smartport_bus_write_packet:
+	jsr	Scaee
 	jsr	smartport_bus_enable
-	ldy	#$07
-	jsr	Scba9
+
+	ldy	#$07		; bit 0 = 1: latch mode
+				; bit 1 = 1: asynchronous
+				; bit 2 = 1: timer disable
+				; bit 3 = 0: slow mode (4 us bit cell)
+				; bit 4 = 0: 7 MHz
+				; bit 5 = 0: normal mode (not test)
+				; bit 6 = 0: not reset				
+	jsr	iwm_write_mode_reg
 
 	lda	iwm_sel_drive_2,x
 	lda	iwm_motor_on,x
-	ldy	#$32
-Lc813:	lda	iwm_q7l,x
-	bmi	Lc81f
+
+	ldy	#50
+Lc813:	lda	iwm_q7l,x	; read status reg
+	bmi	Lc81f		; wait for ACK/ deasserted (high)
 	dey
 	bne	Lc813
 	sec
@@ -336,7 +345,7 @@ Lc813:	lda	iwm_q7l,x
 
 
 ; send packet sync sequence
-Lc81f:	lda	iwm_ph_0_on,x	; turn on REQ
+Lc81f:	lda	iwm_ph_0_on,x	; assert REQ
 
 	ldy	#packet_sync_sequence_len - 1
 	lda	#$ff
@@ -518,11 +527,11 @@ Sc93d:	jsr	get_slot_x
 	bcs	Lc949		; always taken
 
 Lc943:	lda	iwm_q7l,x	; read status
-	bmi	Lc938		; ACK (write protect)? no, keep waiting
+	bmi	Lc938		; ACK asserted (low)? if not, keep waiting
 
 	clc			; yes, so no error
 	
-Lc949:	lda	iwm_ph_0_off,x	; turn off REQ
+Lc949:	lda	iwm_ph_0_off,x	; deassert REQ
 	lda	iwm_q6l,x
 	rts
 
@@ -541,6 +550,7 @@ Sc95b:	nop
 
 Lc95d:	jmp	Sc93d
 
+
 Sc960:	lda	#$00
 	sta	checksum
 	lda	Z54
@@ -558,19 +568,21 @@ Sc960:	lda	#$00
 	jsr	smartport_bus_enable
 
 	lda	iwm_q6h,x
-Lc97d:	lda	iwm_q7l,x
+Lc97d:	lda	iwm_q7l,x	; read status
 	bpl	Lc97d
 	lda	iwm_ph_0_on,x
-	ldy	#$1e
-Lc987:	lda	iwm_q6l,x
-	bpl	Lc987
-	dey
-	bmi	Lc95d
-	cmp	#$c3
-	bne	Lc987
+
+	ldy	#30		; need a $c3 sync byte in first 30 nibbles
+Lc987:	lda	iwm_q6l,x	; read a nibble
+	bpl	Lc987		; loop if don't have a nibble yet
+	dey			; too many attempts?
+	bmi	Lc95d		;   yes, report error
+	cmp	#$c3		; is it the sync byte?
+	bne	Lc987		; loop if not
+
 	ldy	#$06
-Lc995:	lda	iwm_q6l,x
-	bpl	Lc995
+Lc995:	lda	iwm_q6l,x	; read a nibble
+	bpl	Lc995		; loop if don't have a nibble yet
 	and	#$7f
 	sta	Z4b,y
 	eor	#$80
@@ -578,6 +590,7 @@ Lc995:	lda	iwm_q6l,x
 	sta	checksum
 	dey
 	bpl	Lc995
+
 	lda	Z4c
 	beq	Lc9d3
 	clc
@@ -586,6 +599,7 @@ Lc995:	lda	iwm_q6l,x
 	lda	Z55
 	adc	#$00
 	sta	Z57
+
 	ldy	#$00
 Lc9b9:	lda	iwm_q6l,x
 	bpl	Lc9b9
@@ -709,7 +723,7 @@ Lca97:	lda	Z4d
 	lda	Z4e
 	sta	gh_0778
 
-	jsr	Sc800
+	jsr	smartport_bus_write_packet
 
 	lda	gh_06f8
 	sta	Z4d
@@ -743,14 +757,26 @@ Lcac4:	jsr	Sc960
 Lcad8:	rts
 
 
-Dcad9:	fcb	$00,$24,$49
-Dcadc:	fcb	$00,$04,$01
-Dcadf:	fcb	$00,$01,$02,$04,$09,$12
-Dcae5:	fcb	$00,$01,$02,$04,$01,$02
+; Tables of quotients and remainders from dividing multiples of 256 (page size)
+; by 7, from 0 to 2.
+page_div_7_tab:
+	fcb	$0000/7, $0100/7, $0200/7
+page_rem_7_tab:
+	fcb	$0000#7, $0100#7, $0200#7
+
+; Tables of quotients and remainders from dividing powers of 2, from 3 to 7,
+; by 7.  Entry 0 not used
+pow2_div_7:
+	fcb	$00/7, $08/7, $10/7, $20/7, $40/7, $80/7  ; quotients
+pow2_rem_7:
+	fcb	$00#7, $08#7, $10#7, $20#7, $40#7, $80#7  ; remainder
+
 Dcaeb:	fcb	$00,$7f,$ff
 
 
-Scaee:	ldx	Z4e
+; prepare for transmitting a packet, including computing the
+; number of 7-byte groups and the number of "odd bytes"
+Scaee:	ldx	Z4e	; high byte of length
 	beq	Lcb05
 	lda	Z55
 	sta	Z57
@@ -762,32 +788,43 @@ Scaee:	ldx	Z4e
 Lcb00:	clc
 	adc	Z54
 	sta	Z56
-Lcb05:	lda	Dcad9,x
+
+; divide high byte of length by 7 using table lookup
+Lcb05:	lda	page_div_7_tab,x
 	sta	Z4b
-	lda	Dcadc,x
+	lda	page_rem_7_tab,x
 	sta	Z4c
-	ldx	#$05
-	lda	Z4d
-	sta	Z59
+
+	ldx	#$05	; start table lookup at entry for 2^7
+
+	lda	Z4d	; copy low byte of length
+	sta	Z59	; to temp
+
+; convert and add low byte of lenght divided by 7, using table
+; lookup for each bit position from 2^7 down to 2^3
 	and	#$07
 	tay
 Lcb18:	asl	Z59
 	bcc	Lcb31
-	lda	Dcae5,x
+
+	lda	pow2_rem_7,x
 Lcb1f:	clc
 	adc	Z4c
 	cmp	#$07
 	bcc	Lcb28
 	sbc	#$07
 Lcb28:	sta	Z4c
-	lda	Dcadf,x
+
+	lda	pow2_div_7,x
 	adc	Z4b
 	sta	Z4b
+
 Lcb31:	dex
 	bmi	Lcb3a
 	bne	Lcb18
 	tya
 	jmp	Lcb1f
+
 Lcb3a:	lda	Z55
 	pha
 	lda	#$00
@@ -851,16 +888,22 @@ Lcb95:	ror	Z41
 	inc	Z57
 Lcba8:	rts
 
-Scba9:	lda	iwm_motor_off,x
+
+; returns with q6h, q7l
+iwm_write_mode_reg:
+	lda	iwm_motor_off,x
 	lda	iwm_q6h,x
 	jmp	Lcbb6
+
 Lcbb2:	tya
-	sta	iwm_q7h,x
+	sta	iwm_q7h,x	; write mode reg
+
 Lcbb6:	tya
-	eor	iwm_q7l,x
+	eor	iwm_q7l,x	; compare to low 5 bits of status reg
 	and	#$1f
 	bne	Lcbb2
 	rts
+
 
 Scbbf:	lda	Z4b
 	tay
@@ -1238,7 +1281,7 @@ Lce19:	inc	Z5a
 	sta	Z4d
 	lda	#$00
 	sta	Z4e
-	jsr	Sc800	; send init command
+	jsr	smartport_bus_write_packet	; send init command
 	bcc	Lce2d
 
 	dec	Z5a
