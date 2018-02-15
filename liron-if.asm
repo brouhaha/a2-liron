@@ -307,7 +307,7 @@ Lcnf8:	sec
 	endm
 
 Sc800:	jsr	Scaee
-	jsr	Sca05
+	jsr	smartport_bus_enable
 	ldy	#$07
 	jsr	Scba9
 
@@ -535,14 +535,15 @@ Sc960:	lda	#$00
 	lda	Z55
 	sta	Z57
 
-	lda	#$21	; point Z52 at LCn21
+	lda	#$21	; point Z52 at LCn21 for later continuation of execution
 	sta	Z52
 	lda	slot
 	clc
 	adc	#$c0
 	sta	Z53
 
-	jsr	Sca05
+	jsr	smartport_bus_enable
+
 	lda	iwm_q6h,x
 Lc97d:	lda	iwm_q7l,x
 	bpl	Lc97d
@@ -586,7 +587,7 @@ Lc9cc:	sta	(Z54),y
 	iny
 	cpy	Z4c
 	bcc	Lc9c1
-Lc9d3:	jmp	(Z52)
+Lc9d3:	jmp	(Z52)		; continue from slot ROM space
 
 
 send_80:
@@ -601,32 +602,39 @@ send_nib7:
 	rts
 
 
-Sc9e5:	jsr	Sca0f
+Sc9e5:	jsr	smartport_bus_disable
 	lda	iwm_ph_0_on,x
 	lda	iwm_ph_2_on,x
+
 	ldy	#$50
-	jsr	Sc9f8
-	jsr	Sca0f
+	jsr	delay_y_ms
+
+	jsr	smartport_bus_disable
 	ldy	#$0a
 
-Sc9f8:	jsr	Sc9ff
+delay_y_ms:
+	jsr	delay_1ms
 	dey
-	bne	Sc9f8
+	bne	delay_y_ms
 	rts
 
-Sc9ff:	ldx	#$c8
-Lca01:	dex
-	bne	Lca01
+delay_1ms:
+	ldx	#$c8
+delay_1ms_loop:
+	dex
+	bne	delay_1ms_loop
 	rts
 
 
-Sca05:	jsr	get_slot_x
+smartport_bus_enable:
+	jsr	get_slot_x
 	lda	iwm_ph_1_on,x
 	lda	iwm_ph_3_on,x
 	rts
 
 
-Sca0f:	jsr	get_slot_x
+smartport_bus_disable:
+	jsr	get_slot_x
 	lda	iwm_ph_0_off,x
 	lda	iwm_ph_1_off,x
 	lda	iwm_ph_2_off,x
@@ -710,8 +718,10 @@ Scabd:	ldy	slot
 	sta	sh_04f8,y
 Lcac4:	jsr	Sc960
 	bcc	Lcad8
+
 	ldy	#$01
-	jsr	Sc9f8
+	jsr	delay_y_ms
+
 	jsr	Sc93d
 	ldx	slot
 	dec	sh_04f8,x
@@ -1048,7 +1058,7 @@ Lcd02:	lda	Z5a
 	sta	prodos_unit_num
 	lda	#$80
 	sta	Z5b
-	jsr	Sca0f
+	jsr	smartport_bus_disable
 	jsr	Sca76
 	bcs	Lcd5c
 
@@ -1189,7 +1199,7 @@ Scded:	pha
 	sta	Z55
 	lda	#$80
 	sta	Z5b
-	jsr	Sca0f
+	jsr	smartport_bus_disable
 Lce19:	inc	Z5a
 	lda	#$09
 	sta	Z4d
