@@ -107,15 +107,18 @@ Z6c	equ	$6c
 Z6d	equ	$6d
 Z6e	equ	$6e
 Z6f	equ	$6f
-Z70	equ	$70
-L72	equ	$72
-L75	equ	$75
-L78	equ	$78
-L7b	equ	$7b
-L7e	equ	$7e
-L81	equ	$81
-L84	equ	$84
-L87	equ	$87
+
+vector_ram	equ	$70	; first two bytes appear to be unused
+v_read_addr	equ	$72
+v_read_data	equ	$75
+v_write_data	equ	$78
+v_seek		equ	$7b
+v_format	equ	$7e
+v_write_trk	equ	$81
+v_verify	equ	$84
+v_vector	equ	$87
+; there is an unused vector at $8a
+
 
 ; mark table
 Z8d	equ	$8d
@@ -234,9 +237,12 @@ De080:	fcb	$00,$40,$80,$c0,$00,$40,$80,$c0
 
 De100:	fcb	$ff,$ff,$ff
 
-Le103:	jmp	L72
 
-Le106:	jsr	Se56a
+read_addr:
+	jmp	v_read_addr
+
+read_addr_actual:
+	jsr	Se56a
 	jsr	Se162
 	lda	#$05
 	sta	Z17
@@ -312,9 +318,12 @@ denib_tab	equ	*-$96
 	fcb	$f0,$f1,$33,$34,$35,$36,$37,$38
 	fcb	$f8,$39,$3a,$3b,$3c,$3d,$3e,$3f
 
-Se200:	jmp	L75
 
-Le203:	stz	Z21
+read_data:
+	jmp	v_read_data
+
+read_data_actual:
+	stz	Z21
 	stz	Z20
 	stz	Z1f
 	ldy	#$19
@@ -405,9 +414,12 @@ Le2c6:	ora	Z57
 Le2ca:	sec
 	rts
 
-cmd_format:	jmp	L7e
 
-Le2cf:	sec
+cmd_format:
+	jmp	v_format
+
+cmd_format_actual:
+	sec
 	jsr	Se5f0
 	bcs	Le313
 	jsr	Se3b9
@@ -417,9 +429,9 @@ Le2cf:	sec
 	stz	Z14
 Le2e1:	lda	#$0a
 	sta	Z19
-Le2e5:	jsr	Se314
+Le2e5:	jsr	write_trk
 	bcs	Le30c
-	jsr	Se461
+	jsr	verify
 	bcc	Le2f6
 	dec	Z19
 	bne	Le2e5
@@ -441,9 +453,12 @@ Le30c:	jsr	Se51b
 	sta	Z5e
 Le313:	rts
 
-Se314:	jmp	L81
 
-Le317:	jsr	Se48f
+write_trk:
+	jmp	v_write_trk
+
+write_trk_actual:
+	jsr	seek
 	jsr	Se3f0
 	jsr	Se56a
 	lda	Z16
@@ -611,13 +626,15 @@ Le444:	tay
 	sta	D04c2
 	rts
 
-Se461:	jmp	L84
 
-Le464:	lda	#$02
+verify:	jmp	v_verify
+
+verify_actual:
+	lda	#$02
 	jsr	delay
 	lda	Z1a
 	sta	Z18
-Le46d:	jsr	Le103
+Le46d:	jsr	read_addr
 	bcs	Le48b
 	ldx	Z2a
 	cpx	Z1a
@@ -626,7 +643,7 @@ Le46d:	jsr	Le103
 	bmi	Le48b
 	lda	#$ff
 	sta	Z2d,x
-	jsr	Se200
+	jsr	read_data
 	bcs	Le48b
 	dec	Z18
 	bne	Le46d
@@ -635,11 +652,13 @@ Le46d:	jsr	Le103
 Le48b:	sec
 	rts
 
+
 Le48d:	sta	Z14
 
-Se48f:	jmp	L7b
+seek:	jmp	v_seek
 
-Le492:	ldx	Z13
+seek_actual:
+	ldx	Z13
 	bit	Z0d,x
 	bpl	Le49d
 	jsr	Le4f7
@@ -1071,7 +1090,7 @@ Le79c:	lda	Z3d
 	jsr	Se67c
 	jsr	Se9ef
 Le7b1:	jsr	Sea1d
-	jsr	Se822
+	jsr	vector
 	jsr	Seb08
 	bra	Le79c
 
@@ -1100,7 +1119,7 @@ ga_init:
 vector_init:
 	ldx	#ram_vec_tab_len - 1
 Le7db:	lda	ram_vec_tab,x
-	sta	Z70,x
+	sta	vector_ram,x
 	dex
 	bpl	Le7db
 	ldx	#ram_data_tab_len - 1
@@ -1116,14 +1135,14 @@ Le7e5:	lda	ram_data_tab,x
 
 ram_vec_tab:
 	fcb	$1b,$00
-	jmp	Le106		; rd_addr
-	jmp	Le203		; read_data
-	jmp	Lef03		; write_data
-	jmp	Le492		; seek
-	jmp	Le2cf		; format
-	jmp	Le317		; write_trk
-	jmp	Le464		; verify
-	jmp	Le825		; vector
+	jmp	read_addr_actual	; rd_addr
+	jmp	read_data_actual	; read_data
+	jmp	write_data_actual	; write_data
+	jmp	seek_actual		; seek
+	jmp	cmd_format_actual	; format
+	jmp	write_trk_actual	; write_trk
+	jmp	verify_actual		; verify
+	jmp	vector_actual		; vector
 	rts
 	nop
 	nop
@@ -1142,9 +1161,10 @@ ram_data_tab:
 ram_data_tab_len	equ	*-ram_data_tab
 
 
-Se822:	jmp	L87
+vector:	jmp	v_vector
 
-Le825:	lda	Z3d
+vector_actual:
+	lda	Z3d
 	bne	Le837
 	ldx	#$00
 	lda	Z55
@@ -1255,7 +1275,7 @@ Le8c7:	lda	Z39
 	cmp	#$02
 	bne	Le8d0
 Le8cd:	jsr	Le4f7
-Le8d0:	jsr	Se48f
+Le8d0:	jsr	seek
 	bcc	Le8e7
 Le8d5:	dec	Z39
 	bne	Le8c7
@@ -1266,7 +1286,7 @@ Le8db:	inc	Z58
 	lda	Z3b
 	cmp	#$4b
 	beq	Le8cd
-Le8e7:	jsr	Le103
+Le8e7:	jsr	read_addr
 	bcs	Le8db
 	lda	Z29
 	sta	Z17
@@ -1295,7 +1315,7 @@ Le907:	lda	Z17
 	lda	Z4c
 	cmp	#$01
 	bne	Le942
-	jsr	Se200
+	jsr	read_data
 	bcs	Le8db
 	jsr	Lf0cf
 	lda	#$0c
@@ -1315,7 +1335,7 @@ Le93c:	lda	#$a7
 	sta	Z5e
 	sec
 	rts
-Le942:	jsr	Sef00
+Le942:	jsr	write_data
 	clc
 	rts
 
@@ -1426,7 +1446,7 @@ Le9f1:	ldx	Z13
 	jsr	Se640
 	bmi	Lea11
 	jsr	Se614
-	jsr	Le103
+	jsr	read_addr
 	bit	Z17
 	bpl	Lea11
 	jsr	Se51b
@@ -1812,7 +1832,7 @@ control_bad:
 	jsr	Secfd
 	jmp	Leccb
 
-controL_reset:
+control_reset:
 	jmp	vector_init
 
 	jmp	Secfd
@@ -1963,9 +1983,12 @@ nib_tab:
 	fcb	$f7,$f9,$fa,$fb,$fc,$fd,$fe,$ff
 	endm
 
-Sef00:	jmp	L78
 
-Lef03:	bit	iwm_q6h
+write_data:
+	jmp	v_write_data
+
+write_data_actual:
+	bit	iwm_q6h
 	lda	#$ff
 	sta	iwm_q7h
 	ldx	#$07
@@ -2113,7 +2136,7 @@ Lefec:	dex
 	rts
 
 Lf027:	jsr	Se9ce
-	jsr	Se48f
+	jsr	seek
 	jsr	Se56a
 	jsr	Se162
 	lda	#$02
@@ -2229,7 +2252,7 @@ Lf0ef:	lda	D0740,x
 	rts
 
 Lf0f9:	sta	Z4a
-	jsr	Se48f
+	jsr	seek
 	jsr	Se56a
 	lda	#$0e
 	jsr	Se640
@@ -2276,7 +2299,7 @@ Lf148:	jsr	Se9ce
 	jsr	Le4f7
 	stz	Z16
 	stz	Z14
-Lf152:	jsr	Se48f
+Lf152:	jsr	seek
 Lf155:	jsr	Sf169
 	lda	#$80
 	eor	Z16
@@ -2308,7 +2331,7 @@ Lf178:	bit	iwm_q6l
 Lf18d:	jsr	Le4f7
 	lda	#$4f
 	sta	Z14
-	jsr	Se48f
+	jsr	seek
 	jsr	Se56a
 	jmp	Lf18d
 
