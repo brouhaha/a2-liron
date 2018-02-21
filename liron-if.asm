@@ -1,6 +1,6 @@
-; Apple II Liron Disk Controller Card firmware
+; Apple II UniDisk 3.5 (Liron) disk interface card firmware
 ; Firmware P/N 341-????
-; Copyright 2017 Eric Smith <spacewar@gmail.com>
+; Copyright 2018 Eric Smith <spacewar@gmail.com>
 
 	cpu	6502
 
@@ -134,12 +134,8 @@ rom_dis	equ	$cfff
 
 	org	$c000
 
-; unknown data, not visible in Apple II address space, possibly garbage
-	fcb	$c6,$e9,$f2,$ed,$f7,$e1,$f2,$e5
-	fcb	$a0,$f7,$f2,$e9,$f4,$f4,$e5,$ee
-	fcb	$a0,$e2,$f9,$a0,$cd,$e9,$e3,$e8
-	fcb	$e1,$e5,$ec,$a0,$c1,$f3,$eb,$e9
-	fcb	$ee,$f3,$00
+; $c000..$cfff is not visible in Apple II address space
+	fcchz	"Firmware written by Michael Askins"
 	fillto	$c100,$ff
 
 ; Cnxx slot ROM is replicated for all seven slots, and is identical
@@ -1414,10 +1410,7 @@ boot_prodos_command_block_len equ *-boot_prodos_command_block
 
 	fillto	$cfdb,$ff
 
-	fcb	$a8,$c3,$a9
-	fcb	$a0,$b1,$b9,$b8,$b5,$a0,$c1,$f0
-	fcb	$f0,$ec,$e5,$a0,$c3,$ef,$ed,$f0
-	fcb	$f5,$f4,$e5,$f2,$ac,$a0,$c9,$ee
-	fcb	$e3,$ae,$a0,$cd,$d3,$c1,$00,$10
+	fcchz	"(C) 1985 Apple Computer, Inc. MSA"
+	fcb	$10
 
 	fillto	$d000,$ff

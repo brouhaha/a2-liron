@@ -1,6 +1,6 @@
-; Apple II Liron Disk Drive firmware
+; Apple UniDisk 3.5 (Liron, A2M2053) disk drive firmware
 ; Firmware P/N 341-????
-; Copyright 2017 Eric Smith <spacewar@gmail.com>
+; Copyright 2018 Eric Smith <spacewar@gmail.com>
 
 	cpu	65c02
 
@@ -14,9 +14,9 @@ size	set	256
 	endm
 	endm
 
-L00	equ	$00
-Z08	equ	$08
 
+warmstart_ram		equ	$00
+Z08			equ	$08
 ga_shadow_wr_reg0	equ	$09
 ga_shadow_wr_reg1	equ	$0a
 
@@ -458,7 +458,7 @@ Le317:	jsr	Se48f
 	lsr
 	tax
 	lda	De3b4,x
-	jsr	Se4e2
+	jsr	delay2
 Le337:	jsr	Se162
 	stz	Z17
 	stz	Z25
@@ -614,7 +614,7 @@ Le444:	tay
 Se461:	jmp	L84
 
 Le464:	lda	#$02
-	jsr	Se4e7
+	jsr	delay
 	lda	Z1a
 	sta	Z18
 Le46d:	jsr	Le103
@@ -683,11 +683,13 @@ Le4de:	dex
 	bne	Le4de
 	rts
 
-Se4e2:	pha
-	jsr	Se4e7
-	pla
 
-Se4e7:	sta	Z18
+delay2:	pha
+	jsr	delay
+	pla
+; fall into delay
+
+delay:	sta	Z18
 Le4e9:	lda	#$c8
 	sta	Z17
 Le4ed:	dec	Z17
@@ -697,13 +699,14 @@ Le4ed:	dec	Z17
 	bne	Le4e9
 	rts
 
+
 Le4f7:	lda	#$01
 	jsr	Se64a
 	ldx	#$50
 	jsr	Se4cf
 	ldx	#$50
 Le503:	lda	#$07
-	jsr	Se4e7
+	jsr	delay
 	lda	#$0a
 	jsr	Se640
 	bpl	Le515
@@ -722,7 +725,7 @@ Se51b:	lda	#$02
 	lda	#$09
 	jsr	Se64a
 	lda	#$c8
-	jsr	Se4e7
+	jsr	delay
 	lda	#$03
 	sta	Z39
 	ldx	Z13
@@ -732,7 +735,7 @@ Le534:	lda	#$0d
 	lda	#$96
 	sta	Z3b
 Le53d:	lda	#$0a
-	jsr	Se4e7
+	jsr	delay
 	lda	#$02
 	jsr	Se640
 	bmi	Le557
@@ -752,7 +755,7 @@ Le557:	ldx	Z13
 	lda	#$fa
 	sta	Z11,x
 	lda	#$01
-	jsr	Se4e7
+	jsr	delay
 Le568:	clc
 	rts
 
@@ -787,12 +790,14 @@ Le593:	sty	iwm_q7h
 	lda	iwm_motor_on
 	rts
 
-Se5a5:	ldx	#$07
+
+warmstart_check:
+	ldx	#warmstart_tab_len-1
 	stx	Z08
-Le5a9:	lda	De5bb,x
-	cmp	L00,x
+Le5a9:	lda	warmstart_tab,x
+	cmp	warmstart_ram,x
 	beq	Le5b5
-	sta	L00,x
+	sta	warmstart_ram,x
 	sec
 	ror	Z08
 Le5b5:	dex
@@ -801,7 +806,9 @@ Le5b5:	dex
 	rts
 
 
-De5bb:	fcb	$4c,$49,$52,$4f,$4e,$4d,$53,$41	; "LIRONMSA"
+warmstart_tab:
+	fcb	"LIRONMSA"
+warmstart_tab_len	equ	*-warmstart_tab
 
 
 Se5c3:	lda	ga_reg1		; check BLATCH1 and 2
@@ -864,10 +871,10 @@ Se614:	lda	#$00
 	jsr	Se64d
 	ldx	Z13
 	lda	Z11,x
-	jsr	Se4e2
+	jsr	delay2
 	lda	#$19
 	sta	Z11,x
-	jsr	Se4e2
+	jsr	delay2
 Le634:	rts
 
 Le635:	lda	#$01
@@ -1032,8 +1039,10 @@ reset:	sei		; disable interrupts, clear decimal, init stack
 	jsr	Se7bc
 	stz	Z6a
 	stz	Z6b
-	jsr	Se5a5
+
+	jsr	warmstart_check
 	bpl	Le78b
+
 	sec
 	ror	Z6f
 	stz	Z6e
@@ -1042,8 +1051,9 @@ reset:	sei		; disable interrupts, clear decimal, init stack
 	sta	Z12
 	jsr	vector_init
 	lda	#$e6
-	jsr	Se4e7
+	jsr	delay
 	jsr	Se9ef
+
 Le78b:	bit	Z6f
 	bmi	Le799
 	ldx	Z6f
@@ -1064,6 +1074,7 @@ Le7b1:	jsr	Sea1d
 	jsr	Se822
 	jsr	Seb08
 	bra	Le79c
+
 
 Se7bc:	lda	#$04
 	sta	Z62
