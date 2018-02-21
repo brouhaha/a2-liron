@@ -15,6 +15,9 @@ size	set	256
 	endm
 
 
+cr	equ	$0d
+
+
 warmstart_ram		equ	$00
 Z08			equ	$08
 ga_shadow_wr_reg0	equ	$09
@@ -2365,14 +2368,14 @@ Lf18d:	jsr	Le4f7
 
 	fillto	$fea0,$ff
 
-	fcb	"(C) 1985 Apple Computer, Inc.",$0d,$0d
-	fcb	"The firmware was written by Michael Askins.",$0d,$0d
-	fcb	"The Liron design team was:",$0d
-	fcb	" Josef Friedman, manager",$0d
-	fcb	" Cheng Lin, hardware",$0d
-	fcb	" Michael Askins, software",$0d
-	fcb	" Cecilia Arboleya, tech support",$0d
-	fcb	" Cameron Birse, tech support",$0d,$0d
+	fcb	"(C) 1985 Apple Computer, Inc.",cr,cr
+	fcb	"The firmware was written by Michael Askins.",cr,cr
+	fcb	"The Liron design team was:",cr
+	fcb	" Josef Friedman, manager",cr
+	fcb	" Cheng Lin, hardware",cr
+	fcb	" Michael Askins, software",cr
+	fcb	" Cecilia Arboleya, tech support",cr
+	fcb	" Cameron Birse, tech support",cr,cr
 	fcb	$00
 
 	fillto	$ffa0,$ff
