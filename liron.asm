@@ -1,4 +1,5 @@
 ; Apple UniDisk 3.5 (Liron, A2M2053) disk drive firmware
+; includes support for unreleased DuoDisk 3.5
 ; Firmware P/N 341-????
 ; Copyright 2018 Eric Smith <spacewar@gmail.com>
 
@@ -23,73 +24,71 @@ Z08			equ	$08
 ga_shadow_wr_reg0	equ	$09
 ga_shadow_wr_reg1	equ	$0a
 
-Z0b	equ	$0b
-Z0c	equ	$0c
-Z0d	equ	$0d
-Z0f	equ	$0f
-Z10	equ	$10
-Z11	equ	$11
-Z12	equ	$12
-Z13	equ	$13
-Z14	equ	$14
-Z15	equ	$15
-Z16	equ	$16
-Z17	equ	$17
-Z18	equ	$18
-Z19	equ	$19
-Z1a	equ	$1a
-Z1b	equ	$1b
-Z1c	equ	$1c
-Z1d	equ	$1d
-cksum	equ	$1e
-Z1f	equ	$1f
-Z20	equ	$20
-Z21	equ	$21
-Z22	equ	$22
-Z23	equ	$23
-Z24	equ	$24
-Z25	equ	$25
-Z26	equ	$26
+spb_drive_address	equ	$0b	; indexed by current_drive_index
+Z0d			equ	$0d	; indexed by current_drive_index
+Z0f			equ	$0f	; indexed by current_drive_index
+Z11			equ	$11	; indexed by current_drive_index
+
+current_drive_index	equ	$13	; 0 or 1
+
+Z14			equ	$14
+Z15			equ	$15
+Z16			equ	$16
+Z17			equ	$17
+spb_group_count		equ	$18
+spb_packet_type		equ	$19
+Z1a			equ	$1a
+Z1b			equ	$1b
+Z1c			equ	$1c
+Z1d			equ	$1d
+cksum			equ	$1e
+Z1f			equ	$1f
+Z20			equ	$20
+Z21			equ	$21
+Z22			equ	$22
+Z23			equ	$23
+Z24			equ	$24
+Z25			equ	$25
+Z26			equ	$26
 
 ; address field buffer
-Z27	equ	$27
-Z28	equ	$28
-Z29	equ	$29
-Z2a	equ	$2a
-Z2b	equ	$2b
+Z27			equ	$27
+Z28			equ	$28
+Z29			equ	$29
+Z2a			equ	$2a
+Z2b			equ	$2b
 
-Z2c	equ	$2c
-Z2d	equ	$2d
-Z39	equ	$39
-Z3b	equ	$3b
-Z3d	equ	$3d
-Z3e	equ	$3e
-Z3f	equ	$3f
-Z40	equ	$40
-Z41	equ	$41
-Z42	equ	$42
-Z43	equ	$43
-Z4a	equ	$4a
-Z4b	equ	$4b
+spb_odd_byte_count	equ	$2c
+
+Z2d			equ	$2d
+Z39			equ	$39
+Z3b			equ	$3b
+Z3d			equ	$3d
+Z3e			equ	$3e
+Z3f			equ	$3f
+Z40			equ	$40
+Z41			equ	$41
+Z42			equ	$42
+Z43			equ	$43
+Z4a			equ	$4a
+Z4b			equ	$4b
 
 ; CmdTab $4c..$54: command from SmartPort
-Z4c	equ	$4c	; command
-Z4d	equ	$4d	; param count
-; 4e
-; 4f
-Z50	equ	$50	; block number (ReadBlock, WriteBlock command)
-Z51	equ	$51
-Z52	equ	$52
+Z4c			equ	$4c	; command
+Z4d			equ	$4d	; param count
+Z50			equ	$50	; block number
+Z51			equ	$51
+Z52			equ	$52
 
-Z55	equ	$55
+spb_dest_id		equ	$55
 
 ; StatusTab
-Z56	equ	$56
-Z57	equ	$57	; status
-Z58	equ	$58
-Z59	equ	$59
-Z5a	equ	$5a
-Z5b	equ	$5b
+Z56			equ	$56
+Z57			equ	$57	; status
+Z58			equ	$58
+Z59			equ	$59
+Z5a			equ	$5a
+Z5b			equ	$5b
 
 Z5c	equ	$5c
 Z5e	equ	$5e	; StatByte
@@ -111,25 +110,26 @@ Z6d	equ	$6d
 Z6e	equ	$6e
 Z6f	equ	$6f
 
-vector_ram	equ	$70	; first two bytes appear to be unused
-v_read_addr	equ	$72
-v_read_data	equ	$75
-v_write_data	equ	$78
-v_seek		equ	$7b
-v_format	equ	$7e
-v_write_trk	equ	$81
-v_verify	equ	$84
-v_vector	equ	$87
+vector_ram		equ	$70	; first two bytes unused?
+v_read_addr		equ	$72
+v_read_data		equ	$75
+v_write_data		equ	$78
+v_seek			equ	$7b
+v_format		equ	$7e
+v_write_trk		equ	$81
+v_verify		equ	$84
+v_vector		equ	$87
 ; there is an unused vector at $8a
 
 
 ; mark table
-Z8d	equ	$8d
-mt_data	equ	$8e
-mt_sync	equ	$92	; manual says 6 bytes starting at $91, but
-			; firmware doesn't appear to use the byte at $90
-mt_slip	equ	$97
-mt_addr	equ	$9f
+Z8d			equ	$8d
+mt_data			equ	$8e
+mt_sync			equ	$92	; manual says 6 bytes starting at $91,
+					; but firmware doesn't appear to use
+					; the byte at $91
+mt_slip			equ	$97
+mt_addr			equ	$9f
 
 ; zero page $00c0..$00ff left free for use by downloaded code
 
@@ -281,7 +281,7 @@ Le148:	lda	iwm_q7l
 	bpl	Le148
 	cmp	mt_slip+1
 	bne	Le15c
-	ldx	Z13
+	ldx	current_drive_index
 	lda	Z28
 	asl
 	asl
@@ -431,12 +431,12 @@ cmd_format_actual:
 	stz	Z16
 	stz	Z14
 Le2e1:	lda	#$0a
-	sta	Z19
+	sta	spb_packet_type
 Le2e5:	jsr	write_trk
 	bcs	Le30c
 	jsr	verify
 	bcc	Le2f6
-	dec	Z19
+	dec	spb_packet_type
 	bne	Le2e5
 	jmp	Le30c
 Le2f6:	bit	Z63
@@ -486,7 +486,7 @@ Le337:	jsr	Se162
 	sta	iwm_q7h
 	lda	#$00
 	ldx	#$c8
-	sta	Z18
+	sta	spb_group_count
 Le34e:	ldy	#$04
 Le350:	lda	mt_sync,y
 Le353:	bit	iwm_q6l
@@ -496,7 +496,7 @@ Le353:	bit	iwm_q6l
 	bpl	Le350
 	dex
 	bne	Le34e
-	dec	Z18
+	dec	spb_group_count
 	bpl	Le34e
 Le365:	ldy	#$fa
 Le367:	lda	(Z25),y
@@ -636,7 +636,7 @@ verify_actual:
 	lda	#$02
 	jsr	delay
 	lda	Z1a
-	sta	Z18
+	sta	spb_group_count
 Le46d:	jsr	read_addr
 	bcs	Le48b
 	ldx	Z2a
@@ -648,7 +648,7 @@ Le46d:	jsr	read_addr
 	sta	Z2d,x
 	jsr	read_data
 	bcs	Le48b
-	dec	Z18
+	dec	spb_group_count
 	bne	Le46d
 	clc
 	rts
@@ -661,14 +661,14 @@ Le48d:	sta	Z14
 seek:	jmp	v_seek
 
 seek_actual:
-	ldx	Z13
+	ldx	current_drive_index
 	bit	Z0d,x
 	bpl	Le49d
 	jsr	Le4f7
 	bcs	Le4c8
 Le49d:	jsr	Se614
 	sec
-	ldx	Z13
+	ldx	current_drive_index
 	lda	Z0d,x
 	sbc	Z14
 	beq	Le4bb
@@ -681,7 +681,7 @@ Le4b3:	tax
 	tya
 	jsr	Se64a
 	jsr	Se4cf
-Le4bb:	ldx	Z13
+Le4bb:	ldx	current_drive_index
 	lda	Z14
 	sta	Z0d,x
 	jsr	Se6e6
@@ -711,13 +711,13 @@ delay2:	pha
 	pla
 ; fall into delay
 
-delay:	sta	Z18
+delay:	sta	spb_group_count
 Le4e9:	lda	#$c8
 	sta	Z17
 Le4ed:	dec	Z17
 	nop
 	bne	Le4ed
-	dec	Z18
+	dec	spb_group_count
 	bne	Le4e9
 	rts
 
@@ -737,7 +737,7 @@ Le503:	lda	#$07
 	sec
 	bra	Le516
 Le515:	clc
-Le516:	ldx	Z13
+Le516:	ldx	current_drive_index
 	stz	Z0d,x
 	rts
 
@@ -750,7 +750,7 @@ Se51b:	lda	#$02
 	jsr	delay
 	lda	#$03
 	sta	Z39
-	ldx	Z13
+	ldx	current_drive_index
 	stx	Z6f
 Le534:	lda	#$0d
 	jsr	Se64a
@@ -769,7 +769,7 @@ Le53d:	lda	#$0a
 	sta	Z5e
 	sec
 	rts
-Le557:	ldx	Z13
+Le557:	ldx	current_drive_index
 	sec
 	ror	Z6f
 	sec
@@ -841,12 +841,12 @@ Se5c3:	lda	ga_reg1		; check BLATCH1 and 2
 	cmp	#$08
 	beq	Le5d1
 	inx
-Le5d1:	stx	Z13
-	lda	Z0b,x
+Le5d1:	stx	current_drive_index
+	lda	spb_drive_address,x
 	beq	Le5dd
 	jsr	Se9d0
 	jsr	Se51b
-Le5dd:	ldx	Z13
+Le5dd:	ldx	current_drive_index
 	lda	De5ee,x
 	jsr	Se681
 	lda	#$cf
@@ -891,7 +891,7 @@ Se614:	lda	#$00
 	jsr	Se640
 	bpl	Le634
 	jsr	Se64d
-	ldx	Z13
+	ldx	current_drive_index
 	lda	Z11,x
 	jsr	delay2
 	lda	#$19
@@ -969,7 +969,7 @@ Le6a5:	lsr	Z51
 	ror
 	dex
 	bne	Le6a5
-	ldx	Z13
+	ldx	current_drive_index
 	bit	Z0f,x
 	bpl	Le6b4
 	clc
@@ -980,7 +980,7 @@ Le6b4:	tay
 	tay
 	txa
 	clc
-	ldx	Z13
+	ldx	current_drive_index
 	adc	Z15
 Le6c2:	pha
 	jsr	Se6e0
@@ -1029,7 +1029,7 @@ De718:	fcb	$00,$04,$08,$00,$09,$07,$06,$00
 
 
 Le73e:	lda	#$00
-	ldx	Z13
+	ldx	current_drive_index
 	bit	Z0f,x
 	bpl	Le747
 	inc
@@ -1070,7 +1070,7 @@ reset:	sei		; disable interrupts, clear decimal, init stack
 	stz	Z6e
 	lda	#$fa
 	sta	Z11
-	sta	Z12
+	sta	Z11+1
 	jsr	vector_init
 	lda	#$e6
 	jsr	delay
@@ -1079,7 +1079,7 @@ reset:	sei		; disable interrupts, clear decimal, init stack
 Le78b:	bit	Z6f
 	bmi	Le799
 	ldx	Z6f
-	stx	Z13
+	stx	current_drive_index
 	jsr	Se9d5
 	jsr	Se51b
 Le799:	jsr	Se9a4
@@ -1094,7 +1094,7 @@ Le79c:	lda	Z3d
 	jsr	Se9ef
 Le7b1:	jsr	Sea1d
 	jsr	vector
-	jsr	smartport_bus_send_status_packet
+	jsr	spb_send_status_packet
 	bra	Le79c
 
 
@@ -1146,7 +1146,7 @@ ram_vec_tab:
 	jmp	write_trk_actual	; write_trk
 	jmp	verify_actual		; verify
 	jmp	vector_actual		; vector
-	rts
+	rts				; spare vector
 	nop
 	nop
 ram_vec_tab_len	equ	*-ram_vec_tab
@@ -1170,11 +1170,11 @@ vector_actual:
 	lda	Z3d
 	bne	Le837
 	ldx	#$00
-	lda	Z55
-	cmp	Z0b
+	lda	spb_dest_id
+	cmp	spb_drive_address
 	beq	Le832
 	inx
-Le832:	stx	Z13
+Le832:	stx	current_drive_index
 	jsr	Se9d0
 Le837:	lda	Z4c
 	beq	Le844
@@ -1230,12 +1230,12 @@ cmd_tab:
 	fdb	cmd_read_block-1	; ReadBlock
 	fdb	cmd_write_block-1	; WriteBlock
 	fdb	cmd_format-1		; Format
-	fdb	cmd_control-1	; Control
-	fdb	Le947-1	; Init
-	fdb	cmd_bad-1	; Open
-	fdb	cmd_bad-1	; Close
-	fdb	Le96e-1	; Read
-	fdb	Le987-1	; Write
+	fdb	cmd_control-1		; Control
+	fdb	cmd_init-1		; Init
+	fdb	cmd_bad-1		; Open
+	fdb	cmd_bad-1		; Close
+	fdb	cmd_read-1		; Read
+	fdb	cmd_write-1		; Write
 
 
 ; expected parameter count by command
@@ -1256,7 +1256,8 @@ expected_param_count_tab:
 cmd_read_block:	clc
 	bra	Le8b2
 
-cmd_write_block:	ldx	#$0b
+cmd_write_block:
+	ldx	#$0b
 Le8a1:	stz	D0200,x
 	dex
 	bpl	Le8a1
@@ -1301,7 +1302,7 @@ Le8e7:	jsr	read_addr
 	lsr
 	cmp	Z14
 	beq	Le907
-	ldx	Z13
+	ldx	current_drive_index
 	sta	Z0d,x
 	lda	#$04
 	tsb	Z57
@@ -1342,18 +1343,21 @@ Le942:	jsr	write_data
 	clc
 	rts
 
-Le947:	lda	Z3d
+
+cmd_init:
+	lda	Z3d
 	bne	Le94c
 	rts
-Le94c:	stz	Z13
-	ldy	Z55
-	lda	Z0b
+
+Le94c:	stz	current_drive_index
+	ldy	spb_dest_id
+	lda	spb_drive_address
 	beq	Le95a
 	bmi	Le95a
-	sty	Z0b
+	sty	spb_drive_address
 	bra	Le95e
-Le95a:	sty	Z0c
-	inc	Z13
+Le95a:	sty	spb_drive_address+1
+	inc	current_drive_index
 Le95e:	dec	Z3d
 	bne	Le96d
 
@@ -1365,7 +1369,10 @@ Le95e:	dec	Z3d
 	sta	Z5e
 Le96d:	rts
 
-Le96e:	jsr	Se998
+
+; read command can be used to read entire block, i.e., including tag bytes
+cmd_read:
+	jsr	Se998
 	lda	#$01
 	sta	Z4c
 	jsr	cmd_read_block
@@ -1378,7 +1385,10 @@ Le96e:	jsr	Se998
 	sta	Z3f
 Le986:	rts
 
-Le987:	lda	#$00
+
+; write command can be used to read entire block, i.e., including tag bytes
+cmd_write:
+	lda	#$00
 	ldx	#$02
 	jsr	Sed01
 	jsr	Se998
@@ -1394,23 +1404,24 @@ Le99a:	lda	Z52,x
 	bcc	Le99a
 	rts
 
+
 Se9a4:	lda	#$80
 	sta	Z0f
-	sta	Z10
-	stz	Z0b
-	stz	Z0c
+	sta	Z0f+1
+	stz	spb_drive_address
+	stz	spb_drive_address+1
 	stz	Z3d
 	ldx	#$01
-	stx	Z13
+	stx	current_drive_index
 Le9b4:	jsr	Se9d5
 	lda	#$0d
 	jsr	Se640
 	bmi	Le9c4
 	inc	Z3d
 	lda	#$40
-	sta	Z0b,x
+	sta	spb_drive_address,x
 Le9c4:	dex
-	stx	Z13
+	stx	current_drive_index
 	bpl	Le9b4
 	jmp	Se9ea
 
@@ -1418,10 +1429,10 @@ Le9c4:	dex
 	fcb	$23,$22
 
 
-Se9ce:	ldx	Z13
+Se9ce:	ldx	current_drive_index
 
 Se9d0:	sec
-	lda	Z0b,x
+	lda	spb_drive_address,x
 	beq	Le9e9
 
 Se9d5:	txa
@@ -1440,8 +1451,8 @@ Se9ea:	lda	#$03
 	jmp	Se681
 
 
-Se9ef:	stz	Z13
-Le9f1:	ldx	Z13
+Se9ef:	stz	current_drive_index
+Le9f1:	ldx	current_drive_index
 	jsr	Se9d5
 	lda	#$0d
 	jsr	Se640
@@ -1454,8 +1465,8 @@ Le9f1:	ldx	Z13
 	bit	Z17
 	bpl	Lea11
 	jsr	Se51b
-Lea11:	inc	Z13
-	lda	Z13
+Lea11:	inc	current_drive_index
+	lda	current_drive_index
 	cmp	#$02
 	bcc	Le9f1
 	sec
@@ -1464,7 +1475,7 @@ Lea11:	inc	Z13
 
 
 Sea1d:	lda	#$80
-	sta	Z19
+	sta	spb_packet_type
 	lda	#$4c
 	sta	Z25
 	lda	#$00
@@ -1478,43 +1489,57 @@ Sea29:	lda	Z25
 	lda	#$08
 	jsr	Se67c
 Lea39:	jsr	Sec08
-Lea3c:	jsr	Seaf0
+
+; get SmartPort Bus sync byte
+Lea3c:	jsr	spb_read_nib_timeout
 	bcs	Lea69
 	cmp	#$c3
 	bne	Lea3c
+
 	stz	cksum
-	jsr	Seae4
-	sta	Z55
-	cmp	Z0b
+
+	jsr	spb_read_nib_upd_cksum	; get SmartPort destination ID
+	sta	spb_dest_id
+
+	cmp	spb_drive_address+0	; does the dest ID match ours?
 	beq	Lea5f
-	cmp	Z0c
+	cmp	spb_drive_address+1
 	beq	Lea5f
+
 	lda	Z3d
 	bne	Lea5f
+
 	lda	#$03
 	jsr	Se681
 	bra	Lea69
-Lea5f:	jsr	Seae4
-	jsr	Seae4
-	cmp	Z19
+
+Lea5f:	jsr	spb_read_nib_upd_cksum	; get source ID and ignore
+
+	jsr	spb_read_nib_upd_cksum	; get packet type
+	cmp	spb_packet_type			; is it the type we expected?
 	beq	Lea74
+
 Lea69:	lda	iwm_q6h
 Lea6c:	lda	iwm_q7l
 	bmi	Lea6c
 	jmp	Lea39
-Lea74:	jsr	Seae4
-	jsr	Seae4
-	jsr	Seae4
+
+Lea74:	jsr	spb_read_nib_upd_cksum	; get aux type and ignroe
+	jsr	spb_read_nib_upd_cksum	; get data status byte and ignore
+
+	jsr	spb_read_nib_upd_cksum	; get odd byte count
 	and	#$7f
-	sta	Z2c
-	jsr	Seae4
+	sta	spb_odd_byte_count
+
+	jsr	spb_read_nib_upd_cksum	; get group count
 	and	#$7f
-	sta	Z18
+	sta	spb_group_count
+
 	ldy	#$00
-	inc	Z18
-	ldx	Z2c
+	inc	spb_group_count
+	ldx	spb_odd_byte_count
 	bne	Lea96
-	dec	Z18
+	dec	spb_group_count
 	beq	Leabb
 Lea94:	ldx	#$07
 Lea96:	lda	iwm_q6l
@@ -1534,17 +1559,17 @@ Leaa9:	sta	(Z25),y
 	inc	Z26
 Leab4:	dex
 	bne	Lea9e
-	dec	Z18
+	dec	spb_group_count
 	bne	Lea94
-Leabb:	jsr	Seaf0
+Leabb:	jsr	spb_read_nib_timeout
 	sta	Z17
-	jsr	Seaf0
+	jsr	spb_read_nib_timeout
 	sec
 	rol
 	and	Z17
 	cmp	cksum
 	bne	Leafd
-	jsr	Seaf0
+	jsr	spb_read_nib_timeout
 	cmp	#$c8
 	bne	Leafd
 	lda	iwm_ph_0_off
@@ -1556,15 +1581,18 @@ Leadd:	lda	iwm_q7l
 	clc
 	rts
 
-Seae4:	lda	iwm_q6l
-	bpl	Seae4
+spb_read_nib_upd_cksum:
+	lda	iwm_q6l
+	bpl	spb_read_nib_upd_cksum
 	pha
 	eor	cksum
 	sta	cksum
 	pla
 	rts
 
-Seaf0:	ldy	#$14
+
+spb_read_nib_timeout:
+	ldy	#$14
 	clc
 Leaf3:	lda	iwm_q6l
 	bmi	Leafc
@@ -1572,6 +1600,8 @@ Leaf3:	lda	iwm_q6l
 	bne	Leaf3
 	sec
 Leafc:	rts
+
+
 Leafd:	lda	Z6c
 	sta	Z25
 	lda	Z6d
@@ -1579,11 +1609,11 @@ Leafd:	lda	Z6c
 	jmp	Lea69
 
 
-smartport_bus_send_status_packet:
+spb_send_status_packet:
 	lda	#$81		; packet type, $81 = status
-	sta	Z19
+	sta	spb_packet_type
 
-smartport_bus_send_packet:
+spb_send_packet:
 	jsr	Sec3a
 	jsr	Sec84
 	jsr	Seca4
@@ -1595,50 +1625,52 @@ smartport_bus_send_packet:
 	bit	iwm_q6h
 	sta	iwm_q7h
 
-	ldy	#smartport_bus_sync_pattern_len-1
-Leb2a:	lda	smartport_bus_sync_pattern,y
-	jsr	wr_nib
+	ldy	#spb_sync_pattern_len-1
+Leb2a:	lda	spb_sync_pattern,y
+	jsr	spb_wr_nib
 	dey
 	bpl	Leb2a
 
 	stz	cksum
 
-	lda	#$80		; send destination ID, $80 = host
-	jsr	wr_nib_upd_cksum
+	lda	#$80			; send destination ID, $80 = host
+	jsr	spb_wr_nib_upd_cksum
 
-	ldx	Z13		; send source ID, current drive
-	lda	Z0b,x
-	jsr	wr_nib_upd_cksum
+	ldx	current_drive_index	; send source ID, current drive
+	lda	spb_drive_address,x
+	jsr	spb_wr_nib_upd_cksum
 
-	lda	Z19		; send packet type
-	jsr	wr_nib_upd_cksum
+	lda	spb_packet_type			; send packet type
+	jsr	spb_wr_nib_upd_cksum
 	
-	lda	#$80		; send aux type
-	jsr	wr_nib_upd_cksum
+	lda	#$80			; send aux type
+	jsr	spb_wr_nib_upd_cksum
 
-	lda	Z5e		; send data status byte
-	jsr	wr_nib_upd_cksum
+	lda	Z5e			; send data status byte
+	jsr	spb_wr_nib_upd_cksum
 
-	lda	Z2c		; send count of odd bytes (0-6)
-	jsr	wr_nib_upd_cksum
+	lda	spb_odd_byte_count		; send count of odd bytes (0-6)
+	jsr	spb_wr_nib_upd_cksum
 
-	lda	Z18		; send count of seven-byte groups
-	jsr	wr_nib_upd_cksum
+	lda	spb_group_count		; send count of seven-byte groups
+	jsr	spb_wr_nib_upd_cksum
 
-	lda	Z2c		; any odd bytes?
-	beq	Leb6f		;   no, skip
+	lda	spb_odd_byte_count		; any odd bytes?
+	beq	Leb6f			;   no, skip
 
-	ldy	#$00		; send odd bytes
-	lda	Z3e
-	jsr	wr_nib
+	ldy	#$00			; send odd bytes
+
+	lda	Z3e			; write MSBs of odd bytes
+	jsr	spb_wr_nib
+
 Leb65:	lda	(Z25),y
-	jsr	wr_nib_upd_cksum
+	jsr	spb_wr_nib_upd_cksum
 	iny
-	cpy	Z2c
+	cpy	spb_odd_byte_count
 	bcc	Leb65
 
-Leb6f:	lda	Z18		; any groups?
-	beq	Leba8		;   no, skip
+Leb6f:	lda	spb_group_count		; any groups?
+	beq	Leba8			;   no, skip
 
 	ldy	#$00
 Leb75:	lda	Z17
@@ -1665,20 +1697,20 @@ Leb8d:	bit	iwm_q6l
 Leba1:	dex
 	bpl	Leb83
 
-	dec	Z18		; any more groups?
+	dec	spb_group_count	; any more groups?
 	bne	Leb75		;   yes, loop
 
 Leba8:	lda	cksum		; send checksum even bits, don't update checksum
 	ora	#$aa
-	jsr	wr_nib
+	jsr	spb_wr_nib
 
 	lda	cksum		; send checksum odd bits
 	lsr
 	ora	#$aa
-	jsr	wr_nib
+	jsr	spb_wr_nib
 
 	lda	#$c8		; send packet end mark
-	jsr	wr_nib
+	jsr	spb_wr_nib
 
 Lebbc:	lda	iwm_q6l
 	and	#$40
@@ -1695,23 +1727,23 @@ Lebd3:	lda	iwm_q7l
 	bmi	Lebcf
 	lda	iwm_q6l
 	bcc	Lebe0
-	jmp	smartport_bus_send_packet
+	jmp	spb_send_packet
 Lebe0:	rts
 
 
-smartport_bus_sync_pattern:
+spb_sync_pattern:
 	fcb	$c3,$ff,$fc,$f3,$cf,$3f,$ff,$fc
 	fcb	$f3,$cf,$3f
-smartport_bus_sync_pattern_len	equ	*-smartport_bus_sync_pattern
+spb_sync_pattern_len	equ	*-spb_sync_pattern
 
 
-wr_nib_upd_cksum:
+spb_wr_nib_upd_cksum:
 	pha
 	eor	cksum
 	sta	cksum
 	pla
 
-wr_nib:	ora	#$80
+spb_wr_nib:	ora	#$80
 Lebf4:	bit	iwm_q6l
 	bpl	Lebf4
 	sta	iwm_q6h
@@ -1753,9 +1785,9 @@ Lec39:	rts
 
 Sec3a:	ldx	Z40
 	lda	Dec72,x
-	sta	Z18
+	sta	spb_group_count
 	lda	Dec75,x
-	sta	Z2c
+	sta	spb_odd_byte_count
 	ldx	#$05
 	lda	Z3f
 	sta	Z17
@@ -1765,14 +1797,14 @@ Lec4f:	asl	Z17
 	bcc	Lec68
 	lda	Dec7e,x
 Lec56:	clc
-	adc	Z2c
+	adc	spb_odd_byte_count
 	cmp	#$07
 	bcc	Lec5f
 	sbc	#$07
-Lec5f:	sta	Z2c
+Lec5f:	sta	spb_odd_byte_count
 	lda	Dec78,x
-	adc	Z18
-	sta	Z18
+	adc	spb_group_count
+	sta	spb_group_count
 Lec68:	dex
 	bmi	Lec71
 	bne	Lec4f
@@ -1787,7 +1819,7 @@ Dec78:	fcb	$00,$01,$02,$04,$09,$12
 Dec7e:	fcb	$00,$01,$02,$04,$01,$02
 
 
-Sec84:	ldy	Z2c
+Sec84:	ldy	spb_odd_byte_count
 	dey
 	lda	#$00
 	sta	Z3e
@@ -1798,7 +1830,7 @@ Lec8b:	lda	(Z25),y
 	bpl	Lec8b
 	sec
 	ror	Z3e
-	lda	Z2c
+	lda	spb_odd_byte_count
 	clc
 	adc	Z25
 	sta	Z41
@@ -1879,7 +1911,7 @@ Secfd:	lda	#$00
 Sed01:	sta	Z25
 	stx	Z26
 	lda	#$82
-	sta	Z19
+	sta	spb_packet_type
 	jsr	Sea29
 	jmp	Se9ce
 
@@ -1987,7 +2019,7 @@ Leda3:	sec
 Ledbb:	sta	D0200
 	lda	#$40
 	ldy	#$06
-	ldx	Z13
+	ldx	current_drive_index
 	bit	Z0f,x
 	bmi	Ledcc
 	lda	#$20
@@ -2031,7 +2063,7 @@ Lef0f:	bit	iwm_q6l
 	bpl	Lef0d
 	ldy	Z2a
 	lda	nib_tab,y
-	jsr	wr_nib
+	jsr	spb_wr_nib
 	ldx	#$ae
 	bra	Lef39
 Lef26:	ldy	Z69
@@ -2220,8 +2252,8 @@ Lf06e:	jsr	Sf09b
 	adc	#$04
 	sta	Z17
 	bcc	Lf094
-	inc	Z18
-Lf094:	lda	Z18
+	inc	spb_group_count
+Lf094:	lda	spb_group_count
 	cmp	Z61
 	bne	Lf05c
 Lf09a:	rts
@@ -2256,7 +2288,7 @@ Sf0c2:	stz	Z25
 	lda	#$a0
 	sta	Z26
 	lda	Z60
-	sta	Z18
+	sta	spb_group_count
 	rts
 
 Lf0cf:	ldy	#$00
