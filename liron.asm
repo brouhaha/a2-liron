@@ -38,7 +38,7 @@ Z1a	equ	$1a
 Z1b	equ	$1b
 Z1c	equ	$1c
 Z1d	equ	$1d
-Z1e	equ	$1e
+cksum	equ	$1e
 Z1f	equ	$1f
 Z20	equ	$20
 Z21	equ	$21
@@ -259,13 +259,13 @@ Le11b:	lda	iwm_q7l
 	dex
 	bpl	Le114
 	ldx	#$04
-	stz	Z1e
+	stz	cksum
 Le12b:	ldy	iwm_q7l
 	bpl	Le12b
 	lda	De100,y
 	sta	Z27,x
-	eor	Z1e
-	sta	Z1e
+	eor	cksum
+	sta	cksum
 	dex
 	bpl	Le12b
 	tay
@@ -518,7 +518,7 @@ Le369:	bit	iwm_q6l
 	sta	D04d2
 	sta	D04c2
 	tya
-	eor	Z1e
+	eor	cksum
 	tay
 	lda	nib_tab,y
 	sta	D04cf
@@ -590,7 +590,7 @@ Le410:	bit	Z2d,x
 	bra	Le408
 Le417:	lda	Z14
 	and	#$3f
-	sta	Z1e
+	sta	cksum
 	tay
 	lda	nib_tab,y
 	sta	D04d3
@@ -603,8 +603,8 @@ Le417:	lda	Z14
 	bpl	Le431
 	eor	#$20
 Le431:	tay
-	eor	Z1e
-	sta	Z1e
+	eor	cksum
+	sta	cksum
 	lda	nib_tab,y
 	sta	D04d1
 	lda	Z62
@@ -612,8 +612,8 @@ Le431:	tay
 	bpl	Le444
 	ora	#$20
 Le444:	tay
-	eor	Z1e
-	sta	Z1e
+	eor	cksum
+	sta	cksum
 	pha
 	lda	nib_tab,y
 	sta	D04d0
@@ -1091,7 +1091,7 @@ Le79c:	lda	Z3d
 	jsr	Se9ef
 Le7b1:	jsr	Sea1d
 	jsr	vector
-	jsr	Seb08
+	jsr	smartport_bus_send_status_packet
 	bra	Le79c
 
 
@@ -1436,6 +1436,7 @@ Le9e9:	rts
 Se9ea:	lda	#$03
 	jmp	Se681
 
+
 Se9ef:	stz	Z13
 Le9f1:	ldx	Z13
 	jsr	Se9d5
@@ -1458,6 +1459,7 @@ Lea11:	inc	Z13
 	ror	Z6e
 	rts
 
+
 Sea1d:	lda	#$80
 	sta	Z19
 	lda	#$4c
@@ -1477,7 +1479,7 @@ Lea3c:	jsr	Seaf0
 	bcs	Lea69
 	cmp	#$c3
 	bne	Lea3c
-	stz	Z1e
+	stz	cksum
 	jsr	Seae4
 	sta	Z55
 	cmp	Z0b
@@ -1522,8 +1524,8 @@ Lea9e:	lda	iwm_q6l
 	bcs	Leaa9
 	eor	#$80
 Leaa9:	sta	(Z25),y
-	eor	Z1e
-	sta	Z1e
+	eor	cksum
+	sta	cksum
 	iny
 	bne	Leab4
 	inc	Z26
@@ -1537,7 +1539,7 @@ Leabb:	jsr	Seaf0
 	sec
 	rol
 	and	Z17
-	cmp	Z1e
+	cmp	cksum
 	bne	Leafd
 	jsr	Seaf0
 	cmp	#$c8
@@ -1554,8 +1556,8 @@ Leadd:	lda	iwm_q7l
 Seae4:	lda	iwm_q6l
 	bpl	Seae4
 	pha
-	eor	Z1e
-	sta	Z1e
+	eor	cksum
+	sta	cksum
 	pla
 	rts
 
@@ -1573,9 +1575,13 @@ Leafd:	lda	Z6c
 	sta	Z26
 	jmp	Lea69
 
-Seb08:	lda	#$81
+
+smartport_bus_send_status_packet:
+	lda	#$81		; packet type, $81 = status
 	sta	Z19
-Leb0c:	jsr	Sec3a
+
+smartport_bus_send_packet:
+	jsr	Sec3a
 	jsr	Sec84
 	jsr	Seca4
 	jsr	Sebfd
@@ -1585,39 +1591,52 @@ Leb0c:	jsr	Sec3a
 	lda	#$ff
 	bit	iwm_q6h
 	sta	iwm_q7h
-	ldy	#$0a
-Leb2a:	lda	Debe1,y
-	jsr	Sebf2
+
+	ldy	#smartport_bus_sync_pattern_len-1
+Leb2a:	lda	smartport_bus_sync_pattern,y
+	jsr	wr_nib
 	dey
 	bpl	Leb2a
-	stz	Z1e
-	lda	#$80
-	jsr	Sebec
-	ldx	Z13
+
+	stz	cksum
+
+	lda	#$80		; send destination ID, $80 = host
+	jsr	wr_nib_upd_cksum
+
+	ldx	Z13		; send source ID, current drive
 	lda	Z0b,x
-	jsr	Sebec
-	lda	Z19
-	jsr	Sebec
-	lda	#$80
-	jsr	Sebec
-	lda	Z5e
-	jsr	Sebec
-	lda	Z2c
-	jsr	Sebec
-	lda	Z18
-	jsr	Sebec
-	lda	Z2c
-	beq	Leb6f
-	ldy	#$00
+	jsr	wr_nib_upd_cksum
+
+	lda	Z19		; send packet type
+	jsr	wr_nib_upd_cksum
+	
+	lda	#$80		; send aux type
+	jsr	wr_nib_upd_cksum
+
+	lda	Z5e		; send data status byte
+	jsr	wr_nib_upd_cksum
+
+	lda	Z2c		; send count of odd bytes (0-6)
+	jsr	wr_nib_upd_cksum
+
+	lda	Z18		; send count of seven-byte groups
+	jsr	wr_nib_upd_cksum
+
+	lda	Z2c		; any odd bytes?
+	beq	Leb6f		;   no, skip
+
+	ldy	#$00		; send odd bytes
 	lda	Z3e
-	jsr	Sebf2
+	jsr	wr_nib
 Leb65:	lda	(Z25),y
-	jsr	Sebec
+	jsr	wr_nib_upd_cksum
 	iny
 	cpy	Z2c
 	bcc	Leb65
-Leb6f:	lda	Z18
-	beq	Leba8
+
+Leb6f:	lda	Z18		; any groups?
+	beq	Leba8		;   no, skip
+
 	ldy	#$00
 Leb75:	lda	Z17
 	ora	#$80
@@ -1626,8 +1645,8 @@ Leb79:	bit	iwm_q6l
 	sta	iwm_q6h
 	ldx	#$06
 Leb83:	lda	Z43,x
-	eor	Z1e
-	sta	Z1e
+	eor	cksum
+	sta	cksum
 	lda	Z43,x
 	ora	#$80
 Leb8d:	bit	iwm_q6l
@@ -1642,17 +1661,22 @@ Leb8d:	bit	iwm_q6l
 	inc	Z42
 Leba1:	dex
 	bpl	Leb83
-	dec	Z18
-	bne	Leb75
-Leba8:	lda	Z1e
+
+	dec	Z18		; any more groups?
+	bne	Leb75		;   yes, loop
+
+Leba8:	lda	cksum		; send checksum even bits, don't update checksum
 	ora	#$aa
-	jsr	Sebf2
-	lda	Z1e
+	jsr	wr_nib
+
+	lda	cksum		; send checksum odd bits
 	lsr
 	ora	#$aa
-	jsr	Sebf2
-	lda	#$c8
-	jsr	Sebf2
+	jsr	wr_nib
+
+	lda	#$c8		; send packet end mark
+	jsr	wr_nib
+
 Lebbc:	lda	iwm_q6l
 	and	#$40
 	bne	Lebbc
@@ -1668,24 +1692,28 @@ Lebd3:	lda	iwm_q7l
 	bmi	Lebcf
 	lda	iwm_q6l
 	bcc	Lebe0
-	jmp	Leb0c
+	jmp	smartport_bus_send_packet
 Lebe0:	rts
 
 
-Debe1:	fcb	$c3,$ff,$fc,$f3,$cf,$3f,$ff,$fc
+smartport_bus_sync_pattern:
+	fcb	$c3,$ff,$fc,$f3,$cf,$3f,$ff,$fc
 	fcb	$f3,$cf,$3f
+smartport_bus_sync_pattern_len	equ	*-smartport_bus_sync_pattern
 
 
-Sebec:	pha
-	eor	Z1e
-	sta	Z1e
+wr_nib_upd_cksum:
+	pha
+	eor	cksum
+	sta	cksum
 	pla
 
-Sebf2:	ora	#$80
+wr_nib:	ora	#$80
 Lebf4:	bit	iwm_q6l
 	bpl	Lebf4
 	sta	iwm_q6h
 	rts
+
 
 Sebfd:	lda	#$22
 	jsr	Se67c
@@ -2000,7 +2028,7 @@ Lef0f:	bit	iwm_q6l
 	bpl	Lef0d
 	ldy	Z2a
 	lda	nib_tab,y
-	jsr	Sebf2
+	jsr	wr_nib
 	ldx	#$ae
 	bra	Lef39
 Lef26:	ldy	Z69
