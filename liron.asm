@@ -1,7 +1,8 @@
 ; Apple UniDisk 3.5 (Liron, A2M2053) disk drive firmware
 ; includes support for unreleased DuoDisk 3.5
 ; Firmware P/N 341-????
-; Copyright 2018 Eric Smith <spacewar@gmail.com>
+; Copyright 1985 Apple Computer, Inc.
+; Disassembly copyright 2018 Eric Smith <spacewar@gmail.com>
 
 	cpu	65c02
 
@@ -16,6 +17,27 @@ size	set	256
 	endm
 
 
+; error codes
+err_noerr	equ	$00	; no error
+err_badcmd	equ	$01	; bad command number
+err_badpcnt	equ	$04	; bad parameter count
+err_buserr	equ	$06	; communications error
+err_badunit	equ	$11	; invalid unit number
+err_noint	equ	$1f	; interrupt devices are not supported
+err_badctl	equ	$21	; invalid control or status code
+err_badctlparam	equ	$22	; invalid parameter list
+err_ioerror	equ	$27	; I/O error
+err_nodrive	equ	$28	; no device connected
+err_nowrite	equ	$2b	; disk write protected
+err_badblock	equ	$2d	; invalid block number
+err_disksw	equ	$2e	; media has been swapped (exended calls only)
+err_offline	equ	$2f	; device offline or no disk in drive
+; $30..$3f are device-specific errors
+; $50..$5f are device-specific soft errors (considered successful)
+; $60..$6f are equivalent to $20..$2f with soft error (considered successful)
+
+
+
 cr	equ	$0d
 
 
@@ -25,13 +47,13 @@ ga_shadow_wr_reg0	equ	$09
 ga_shadow_wr_reg1	equ	$0a
 
 spb_drive_address	equ	$0b	; indexed by current_drive_index
-Z0d			equ	$0d	; indexed by current_drive_index
+cur_cyl			equ	$0d	; indexed by current_drive_index
 Z0f			equ	$0f	; indexed by current_drive_index
 Z11			equ	$11	; indexed by current_drive_index
 
 current_drive_index	equ	$13	; 0 or 1
 
-Z14			equ	$14
+cyl			equ	$14
 Z15			equ	$15
 Z16			equ	$16
 Z17			equ	$17
@@ -74,11 +96,14 @@ Z4a			equ	$4a
 Z4b			equ	$4b
 
 ; CmdTab $4c..$54: command from SmartPort
-Z4c			equ	$4c	; command
-Z4d			equ	$4d	; param count
-Z50			equ	$50	; block number
-Z51			equ	$51
-Z52			equ	$52
+sp_cmd			equ	$4c	; command
+sp_param_count		equ	$4d	; param count
+sp_param		equ	$4e	; up to 7 bytes of parameters
+sp_ctl_code		equ	sp_param+2	; control code
+sp_stat_code		equ	sp_param+2	; status code
+sp_block		equ	sp_param+2	; three-byte block number
+
+
 
 spb_dest_id		equ	$55
 
@@ -90,25 +115,25 @@ Z59			equ	$59
 Z5a			equ	$5a
 Z5b			equ	$5b
 
-Z5c	equ	$5c
-Z5e	equ	$5e	; StatByte
-Z5f	equ	$5f
-Z60	equ	$60
-Z61	equ	$61
-Z62	equ	$62
-Z63	equ	$63
-Z64	equ	$64
-Z65	equ	$65
-Z66	equ	$66
-Z67	equ	$67
-Z68	equ	$68
-Z69	equ	$69
-Z6a	equ	$6a
-Z6b	equ	$6b
-Z6c	equ	$6c
-Z6d	equ	$6d
-Z6e	equ	$6e
-Z6f	equ	$6f
+Z5c			equ	$5c
+Z5e			equ	$5e	; StatByte
+Z5f			equ	$5f
+Z60			equ	$60
+Z61			equ	$61
+Z62			equ	$62
+form_sides		equ	$63	; $00 for single-sided, $80 for double-sided
+Z64			equ	$64
+Z65			equ	$65
+Z66			equ	$66
+Z67			equ	$67
+Z68			equ	$68
+Z69			equ	$69
+Z6a			equ	$6a
+Z6b			equ	$6b
+Z6c			equ	$6c
+Z6d			equ	$6d
+Z6e			equ	$6e
+Z6f			equ	$6f
 
 vector_ram		equ	$70	; first two bytes unused?
 v_read_addr		equ	$72
@@ -429,7 +454,7 @@ cmd_format_actual:
 	jsr	Le4f7
 	bcs	Le30c
 	stz	Z16
-	stz	Z14
+	stz	cyl
 Le2e1:	lda	#$0a
 	sta	spb_packet_type
 Le2e5:	jsr	write_trk
@@ -439,14 +464,14 @@ Le2e5:	jsr	write_trk
 	dec	spb_packet_type
 	bne	Le2e5
 	jmp	Le30c
-Le2f6:	bit	Z63
+Le2f6:	bit	form_sides
 	bpl	Le302
 	lda	#$80
 	eor	Z16
 	sta	Z16
 	bne	Le2e1
-Le302:	inc	Z14
-	lda	Z14
+Le302:	inc	cyl
+	lda	cyl
 	cmp	#$50
 	bcc	Le2e1
 	clc
@@ -466,10 +491,10 @@ write_trk_actual:
 	jsr	Se56a
 	lda	Z16
 	bne	Le337
-	lda	Z14
+	lda	cyl
 	and	#$0f
 	bne	Le337
-	lda	Z14
+	lda	cyl
 	lsr
 	lsr
 	lsr
@@ -591,13 +616,13 @@ Le410:	bit	Z2d,x
 	bmi	Le3fc
 	inx
 	bra	Le408
-Le417:	lda	Z14
+Le417:	lda	cyl
 	and	#$3f
 	sta	cksum
 	tay
 	lda	nib_tab,y
 	sta	D04d3
-	lda	Z14
+	lda	cyl
 	asl
 	asl
 	lda	#$00
@@ -611,7 +636,7 @@ Le431:	tay
 	lda	nib_tab,y
 	sta	D04d1
 	lda	Z62
-	bit	Z63
+	bit	form_sides
 	bpl	Le444
 	ora	#$20
 Le444:	tay
@@ -656,21 +681,21 @@ Le48b:	sec
 	rts
 
 
-Le48d:	sta	Z14
+Le48d:	sta	cyl
 
 seek:	jmp	v_seek
 
 seek_actual:
 	ldx	current_drive_index
-	bit	Z0d,x
+	bit	cur_cyl,x
 	bpl	Le49d
 	jsr	Le4f7
 	bcs	Le4c8
 Le49d:	jsr	Se614
 	sec
 	ldx	current_drive_index
-	lda	Z0d,x
-	sbc	Z14
+	lda	cur_cyl,x
+	sbc	cyl
 	beq	Le4bb
 	ldy	#$01
 	bcs	Le4b3
@@ -682,8 +707,8 @@ Le4b3:	tax
 	jsr	Se64a
 	jsr	Se4cf
 Le4bb:	ldx	current_drive_index
-	lda	Z14
-	sta	Z0d,x
+	lda	cyl
+	sta	cur_cyl,x
 	jsr	Se6e6
 	sta	Z1a
 	clc
@@ -738,7 +763,7 @@ Le503:	lda	#$07
 	bra	Le516
 Le515:	clc
 Le516:	ldx	current_drive_index
-	stz	Z0d,x
+	stz	cur_cyl,x
 	rts
 
 Se51b:	lda	#$02
@@ -773,7 +798,7 @@ Le557:	ldx	current_drive_index
 	sec
 	ror	Z6f
 	sec
-	ror	Z0d,x
+	ror	cur_cyl,x
 	lda	#$fa
 	sta	Z11,x
 	lda	#$01
@@ -960,12 +985,12 @@ Le684:	pha
 	plx
 	rts
 
-Le69b:	lda	Z50
+Le69b:	lda	sp_param+2
 	and	#$3f
 	sta	Z15
-	lda	Z50
+	lda	sp_param+2
 	ldx	#$06
-Le6a5:	lsr	Z51
+Le6a5:	lsr	sp_param+3
 	ror
 	dex
 	bne	Le6a5
@@ -991,11 +1016,11 @@ Le6c2:	pha
 	iny
 	sbc	Z17
 	jmp	Le6c2
-Le6d3:	sty	Z14
+Le6d3:	sty	cyl
 	sta	Z15
 	bit	Z0f,x
 	bpl	Le6dd
-	lsr	Z14
+	lsr	cyl
 Le6dd:	ror	Z16
 	rts
 
@@ -1034,11 +1059,11 @@ Le73e:	lda	#$00
 	bpl	Le747
 	inc
 Le747:	tax
-	lda	Z50
+	lda	sp_block+0
 	cmp	block_count_low_tab,x
-	lda	Z51
+	lda	sp_block+1
 	sbc	block_count_high_tab,x
-	lda	Z52
+	lda	sp_block+2
 	sbc	#$00
 	bcc	Le75c
 	lda	#$ad
@@ -1101,7 +1126,7 @@ Le7b1:	jsr	Sea1d
 Se7bc:	lda	#$04
 	sta	Z62
 	lda	#$80
-	sta	Z63
+	sta	form_sides
 	rts
 
 
@@ -1176,7 +1201,7 @@ vector_actual:
 	inx
 Le832:	stx	current_drive_index
 	jsr	Se9d0
-Le837:	lda	Z4c
+Le837:	lda	sp_cmd
 	beq	Le844
 	ldx	#$06
 	lda	#$00
@@ -1188,7 +1213,7 @@ Le844:	stz	Z3f
 	lda	#$80
 	sta	Z5e
 
-	lda	Z4c		; get command
+	lda	sp_cmd		; get command
 	cmp	#$0a		; out of range
 	bcc	Le857		;   no
 
@@ -1200,7 +1225,7 @@ cmd_bad:
 Le857:	tax			; get expected arg count
 	lda	expected_param_count_tab,x
 	and	#$7f
-	cmp	Z4d		; does it match what we've received from host?
+	cmp	sp_param_count	; does it match what we've received from host?
 	beq	Le872
 
 ; arg count different than expected
@@ -1253,7 +1278,8 @@ expected_param_count_tab:
 	fcb	$84	; Write
 
 
-cmd_read_block:	clc
+cmd_read_block:
+	clc
 	bra	Le8b2
 
 cmd_write_block:
@@ -1300,10 +1326,10 @@ Le8e7:	jsr	read_addr
 	lsr	Z17
 	ror
 	lsr
-	cmp	Z14
+	cmp	cyl
 	beq	Le907
 	ldx	current_drive_index
-	sta	Z0d,x
+	sta	cur_cyl,x
 	lda	#$04
 	tsb	Z57
 	jmp	Le8d5
@@ -1316,7 +1342,7 @@ Le907:	lda	Z17
 	lda	Z2a
 	cmp	Z15
 	bne	Le8db
-	lda	Z4c
+	lda	sp_cmd
 	cmp	#$01
 	bne	Le942
 	jsr	read_data
@@ -1373,16 +1399,18 @@ Le96d:	rts
 ; read command can be used to read entire block, i.e., including tag bytes
 cmd_read:
 	jsr	Se998
-	lda	#$01
-	sta	Z4c
+	lda	#$01		; do a read block command
+	sta	sp_cmd
 	jsr	cmd_read_block
 	bcs	Le986
+
 	lda	#$00
 	sta	Z25
 	lda	#$02
 	sta	Z26
 	lda	#$0c
 	sta	Z3f
+
 Le986:	rts
 
 
@@ -1393,12 +1421,12 @@ cmd_write:
 	jsr	Sed01
 	jsr	Se998
 	lda	#$02
-	sta	Z4c
+	sta	sp_cmd
 	jmp	Le8ae
 
 Se998:	ldx	#$00
-Le99a:	lda	Z52,x
-	sta	Z50,x
+Le99a:	lda	sp_param+4,x
+	sta	sp_param+2,x
 	inx
 	cpx	#$03
 	bcc	Le99a
@@ -1862,11 +1890,11 @@ Lecc4:	rts
 
 
 cmd_control:
-	lda	Z50
-	cmp	#$08
+	lda	sp_ctl_code
+	cmp	#max_control
 	bcc	Lecd0
 
-Leccb:	lda	#$a1
+Leccb:	lda	#$80 + err_badctl	; control code out of range
 	sta	Z5e
 	rts
 
@@ -1889,6 +1917,7 @@ control_tab:
 	fdb	control_execute-1	; Execute
 	fdb	control_set_address-1	; SetAddress
 	fdb	control_download-1	; Download
+max_control	equ	(*-control_tab)/2
 
 
 control_bad:
@@ -1955,27 +1984,30 @@ cmd_status:
 	sta	Z25
 	lda	#$02
 	sta	Z26
-	lda	Z50
-	cmp	#$06
+
+	lda	sp_stat_code
+	cmp	#max_status
 	bcc	Led57
 	jmp	Leccb
 
 
 Led57:	asl
 	tax
-	lda	Ded62+1,x
+	lda	status_tab+1,x
 	pha
-	lda	Ded62,x
+	lda	status_tab,x
 	pha
 	rts
 
 
-Ded62:	fdb	Leda3-1		; device status
+status_tab:
+	fdb	Leda3-1		; device status
 	fdb	Leccb-1		; device control block
 	fdb	Leccb-1		; newline status
 	fdb	Led6e-1		; device information block
 	fdb	Leccb-1
 	fdb	Led96-1		; UniDiskStat
+max_status	equ	(*-status_tab)/2
 
 
 Led6e:	jsr	Leda3
@@ -2361,15 +2393,15 @@ Lf143:	lda	#$7f
 Lf148:	jsr	Se9ce
 	jsr	Le4f7
 	stz	Z16
-	stz	Z14
+	stz	cyl
 Lf152:	jsr	seek
 Lf155:	jsr	Sf169
 	lda	#$80
 	eor	Z16
 	sta	Z16
 	bmi	Lf155
-	inc	Z14
-	lda	Z14
+	inc	cyl
+	lda	cyl
 	cmp	#$50
 	bcc	Lf152
 	rts
@@ -2392,8 +2424,8 @@ Lf178:	bit	iwm_q6l
 	rts
 
 Lf18d:	jsr	Le4f7
-	lda	#$4f
-	sta	Z14
+	lda	#79
+	sta	cyl
 	jsr	seek
 	jsr	Se56a
 	jmp	Lf18d
