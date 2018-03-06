@@ -23,6 +23,13 @@ fcchz	macro	string
 	endm
 
 
+; ProDOS protocol status
+p_stat_io_err	equ	$27
+p_stat_no_dev	equ	$28
+p_stat_wprot	equ	$2b
+p_stat_offline	equ	$2f
+
+
 ; SmartPort bus commands
 sp_cmd_status	equ	$00
 sp_cmd_readblk	equ	$01	; block device only
@@ -76,13 +83,14 @@ Z5b		equ	$5b	; packet type
 
 ; per-slot screen holes (index by slot)
 sh_prodos_flag	equ	$0478	; MSB = 1 for ProDOS, 0 for SmartPort
-sh_04f8		equ	$04f8
-sh_0578		equ	$0578
+sh_retry_cnt_l	equ	$04f8
+sh_retry_cnt_h	equ	$0578
+sh_status_save	equ	$0578	; save status flag during return sequence
 sh_05f8		equ	$05f8
 sh_0678		equ	$0678
 sh_magic1	equ	$06f8	; $a5 if firmware initialized
 sh_magic2	equ	$0778	; $5a if firmware initialized
-unit_count		equ	$07f8
+sh_unit_count	equ	$07f8
 
 
 ; global screen holes - undocumented
@@ -724,9 +732,9 @@ Sca76:	jsr	Sca8a
 Sca8a:	lda	#3000 & $ff	; retry 3000 times!
 	ldy	#3000 >> 8
 	ldx	slot
-	sta	sh_04f8,x
+	sta	sh_retry_cnt_l,x
 	tya
-	sta	sh_0578,x
+	sta	sh_retry_cnt_h,x
 
 Lca97:	lda	Z4d
 	sta	gh_06f8
@@ -743,27 +751,29 @@ Lca97:	lda	Z4d
 	bcc	Lcabc		; if no error, done
 
 	ldx	slot		; decrement retry count
-	dec	sh_04f8,x
+	dec	sh_retry_cnt_l,x
 	bne	Lca97
-	dec	sh_0578,x
+	dec	sh_retry_cnt_h,x
 	bpl	Lca97
 
 Lcabc:	rts
 
 
-Scabd:	ldy	slot
+smartport_bus_read_packet_with_retries:
+	ldy	slot
 	lda	#$05
-	sta	sh_04f8,y
+	sta	sh_retry_cnt_l,y
 Lcac4:	jsr	smartport_bus_read_packet
-	bcc	Lcad8
+	bcc	Lcad8		; good?
 
 	ldy	#1
 	jsr	delay_y_ms
 
 	jsr	Sc93d
 	ldx	slot
-	dec	sh_04f8,x
+	dec	sh_retry_cnt_l,x
 	bne	Lcac4
+
 Lcad8:	rts
 
 
@@ -1071,7 +1081,7 @@ Lcc92:	txa
 Lcca0:	sta	(prodos_buffer),y
 	dey
 	bne	Lcca0
-	lda	unit_count,x
+	lda	sh_unit_count,x
 	sta	(prodos_buffer),y
 	iny
 	lda	#$00
@@ -1096,7 +1106,7 @@ Lcccb:	lda	#$1f
 ; ProDOS
 Lcccf:	lda	#$28
 	ldy	slot
-	ldx	unit_count,y
+	ldx	sh_unit_count,y
 	cpx	prodos_unit_num
 	bcc	Lccc5
 
@@ -1178,16 +1188,20 @@ Lcd60:	ldy	slot
 
 	lda	prodos_command
 	bne	Lcd73
+
 	lda	#$45
 	ldx	#$00
 	sta	Z54
 	stx	Z54+1
-Lcd73:	jsr	Scabd
+Lcd73:	jsr	smartport_bus_read_packet_with_retries
 	bcs	Lcd5c
+
 	jsr	Scbbf
 	jsr	Sce4f
+
 	lda	prodos_command
 	bne	Lcd9d
+
 	ldx	slot
 	lda	sh_prodos_flag,x	; ProDOS or SmartPort?
 	bpl	Lcd9d
@@ -1207,7 +1221,7 @@ Lcd73:	jsr	Scabd
 
 Lcd9d:	lda	Z4d
 Lcd9f:	ldy	slot
-	sta	sh_04f8,y
+	sta	sh_retry_cnt_l,y	; not being used as retry count here?
 	tax
 	beq	Lcdc1
 
@@ -1218,19 +1232,19 @@ Lcd9f:	ldy	slot
 	cmp	#$40
 	bcs	Lcdc0
 
-	ldx	#$27
-	cmp	#$2b
+	ldx	#p_stat_io_err
+	cmp	#p_stat_wprot
 	beq	Lcdc1
 
-	cmp	#$28
+	cmp	#p_stat_no_dev
 	beq	Lcdc1
 
-	cmp	#$2f
+	cmp	#p_stat_offline
 	beq	Lcdc1
 
 Lcdc0:	txa
 Lcdc1:	ldy	slot
-	sta	sh_0578,y
+	sta	sh_status_save,y
 
 ; restore zero page $40..$5b from stack
 	ldx	#$00
@@ -1243,7 +1257,7 @@ Lcdc8:	pla
 	plp
 	lda	sh_05f8,y
 	tax
-	lda	sh_0578,y
+	lda	sh_status_save,y
 	pha
 	lda	sh_0678,y
 	tay
@@ -1303,7 +1317,7 @@ Lce2d:	jsr	smartport_bus_read_packet
 
 Lce34:	lda	Z5a
 	ldy	slot
-	sta	unit_count,y
+	sta	sh_unit_count,y
 
 	pla
 	sta	prodos_block
@@ -1382,7 +1396,7 @@ Lcea4:	ldx	#23		; bottom line of display
 	sta	mon_ch
 	ldx	#$00
 	ldy	slot
-	lda	sh_04f8,y
+	lda	sh_retry_cnt_l,y	; not being used as retry count here?
 	bne	Lceba
 	ldx	#msg_not_bootable - msg_tab
 Lceba:	cmp	#$28
