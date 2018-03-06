@@ -23,11 +23,22 @@ fcchz	macro	string
 	endm
 
 
-; ProDOS protocol status
-p_stat_io_err	equ	$27
-p_stat_no_dev	equ	$28
-p_stat_wprot	equ	$2b
-p_stat_offline	equ	$2f
+; SmartPort error codes
+stat_no_err	equ	$00
+stat_bad_cmd	equ	$01
+stat_bad_pcnt	equ	$04
+stat_bus_err	equ	$06
+stat_bad_unit	equ	$11
+stat_no_int	equ	$1f
+stat_bad_ctl	equ	$21
+stat_bad_parm	equ	$22
+stat_io_error	equ	$27	; ProDOS protocol also
+stat_no_drive	equ	$28	; ProDOS protocol also
+stat_no_write	equ	$2b	; ProDOS protocol also
+stat_bad_block	equ	$2d
+stat_disk_sw	equ	$2e
+stat_offline	equ	$2f	; ProDOS protocol also
+
 
 
 ; SmartPort bus commands
@@ -1037,7 +1048,7 @@ Lcc3c:	lda	sh_05f8,y	; set Z54 to point to cmd num -1
 	sta	Z54+1
 	stx	Z54
 
-	lda	#$01
+	lda	#stat_bad_cmd
 
 	ldx	prodos_command		; SmartPort command in range ($00 to $09)?
 	cpx	#$0a
@@ -1070,6 +1081,7 @@ Lcc6a:	lda	(Z54),y
 	jsr	Scded
 Lcc8d:	lda	#$00
 	jmp	Lcdc1
+
 Lcc92:	txa
 	bne	Lccb8
 	lda	#$21
@@ -1096,15 +1108,17 @@ Lccb8:	cmp	#$04
 	beq	Lcccb
 	dex
 	beq	Lcccb
-	lda	#$21
+	lda	#stat_bad_ctl
 Lccc5:	bne	Lcc5f
-Lccc7:	lda	#$11
+
+Lccc7:	lda	#stat_bad_unit
 	bne	Lcc5f
-Lcccb:	lda	#$1f
+
+Lcccb:	lda	#stat_no_int
 	bne	Lcc5f
 
 ; ProDOS
-Lcccf:	lda	#$28
+Lcccf:	lda	#stat_no_drive
 	ldy	slot
 	ldx	sh_unit_count,y
 	cpx	prodos_unit_num
@@ -1179,7 +1193,8 @@ Lcd4f:	stx	Z4e
 	sta	Z5b
 	jsr	Sca67
 	bcc	Lcd60
-Lcd5c:	lda	#$06
+
+Lcd5c:	lda	#stat_bus_err
 	bne	Lcd9f
 
 Lcd60:	ldy	slot
@@ -1216,7 +1231,7 @@ Lcd73:	jsr	smartport_bus_read_packet_with_retries
 	and	#$10
 	bne	Lcd9d
 
-	lda	#$2f
+	lda	#stat_offline
 	bne	Lcd9f
 
 Lcd9d:	lda	Z4d
@@ -1232,17 +1247,19 @@ Lcd9f:	ldy	slot
 	cmp	#$40
 	bcs	Lcdc0
 
-	ldx	#p_stat_io_err
-	cmp	#p_stat_wprot
+	ldx	#stat_io_error		; default result
+
+	cmp	#stat_no_write
 	beq	Lcdc1
 
-	cmp	#p_stat_no_dev
+	cmp	#stat_no_drive
 	beq	Lcdc1
 
-	cmp	#p_stat_offline
+	cmp	#stat_offline
 	beq	Lcdc1
 
 Lcdc0:	txa
+
 Lcdc1:	ldy	slot
 	sta	sh_status_save,y
 
@@ -1399,10 +1416,10 @@ Lcea4:	ldx	#23		; bottom line of display
 	lda	sh_retry_cnt_l,y	; not being used as retry count here?
 	bne	Lceba
 	ldx	#msg_not_bootable - msg_tab
-Lceba:	cmp	#$28
+Lceba:	cmp	#stat_no_drive
 	bne	Lcec0
 	ldx	#msg_no_dev - msg_tab
-Lcec0:	cmp	#$2f
+Lcec0:	cmp	#stat_offline
 	bne	Lcec6
 	ldx	#msg_no_disk - msg_tab
 
