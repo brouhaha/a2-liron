@@ -95,8 +95,9 @@ Z5b		equ	$5b	; packet type
 ; per-slot screen holes (index by slot)
 sh_prodos_flag	equ	$0478	; MSB = 1 for ProDOS, 0 for SmartPort
 sh_retry_cnt_l	equ	$04f8
+sh_status_save1	equ	$04f8
 sh_retry_cnt_h	equ	$0578
-sh_status_save	equ	$0578	; save status flag during return sequence
+sh_status_save2	equ	$0578	; save status flag during return sequence
 sh_05f8		equ	$05f8
 sh_0678		equ	$0678
 sh_magic1	equ	$06f8	; $a5 if firmware initialized
@@ -1069,14 +1070,18 @@ Lcc6a:	lda	(Z54),y
 	lda	prodos_unit_num
 	bne	Lcccf
 	ldx	prodos_command
-	lda	Dcde3,x
+
+	lda	expected_param_cnt_tbl,x
 	and	#$7f
 	tay
-	lda	#$04
+
+	lda	#stat_bad_pcnt
 	cpy	Z5a
 	bne	Lcc5f
+
 	cpx	#$05
 	bne	Lcc92
+
 	lda	#$00
 	jsr	Scded
 Lcc8d:	lda	#$00
@@ -1102,6 +1107,7 @@ Lcca0:	sta	(prodos_buffer),y
 	dey
 	jsr	Sce4f
 	jmp	Lcc8d
+
 Lccb8:	cmp	#$04
 	bne	Lccc7
 	ldx	prodos_block
@@ -1138,7 +1144,7 @@ Lcccf:	lda	#stat_no_drive
 	bpl	Lcd02
 
 	ldx	prodos_command
-	lda	Dcde3,x
+	lda	expected_param_cnt_tbl,x
 	and	#$7f
 	sta	Z5a
 	lda	#$00
@@ -1154,7 +1160,7 @@ Lcd02:	lda	Z5a
 	sta	Z5b
 	jsr	smartport_bus_disable
 	jsr	Sca76
-	bcs	Lcd5c
+	bcs	bus_err
 
 	lda	prodos_buffer
 	sta	Z54
@@ -1162,8 +1168,9 @@ Lcd02:	lda	Z5a
 	sta	Z54+1
 
 	ldx	prodos_command
-	lda	Dcde3,x
+	lda	expected_param_cnt_tbl,x
 	bpl	Lcd60
+
 	cpx	#$04
 	bne	Lcd41
 	ldy	#$01
@@ -1194,7 +1201,8 @@ Lcd4f:	stx	Z4e
 	jsr	Sca67
 	bcc	Lcd60
 
-Lcd5c:	lda	#stat_bus_err
+bus_err:
+	lda	#stat_bus_err
 	bne	Lcd9f
 
 Lcd60:	ldy	slot
@@ -1209,7 +1217,7 @@ Lcd60:	ldy	slot
 	sta	Z54
 	stx	Z54+1
 Lcd73:	jsr	smartport_bus_read_packet_with_retries
-	bcs	Lcd5c
+	bcs	bus_err
 
 	jsr	Scbbf
 	jsr	Sce4f
@@ -1236,7 +1244,7 @@ Lcd73:	jsr	smartport_bus_read_packet_with_retries
 
 Lcd9d:	lda	Z4d
 Lcd9f:	ldy	slot
-	sta	sh_retry_cnt_l,y	; not being used as retry count here?
+	sta	sh_status_save1,y
 	tax
 	beq	Lcdc1
 
@@ -1261,7 +1269,7 @@ Lcd9f:	ldy	slot
 Lcdc0:	txa
 
 Lcdc1:	ldy	slot
-	sta	sh_status_save,y
+	sta	sh_status_save2,y
 
 ; restore zero page $40..$5b from stack
 	ldx	#$00
@@ -1274,7 +1282,7 @@ Lcdc8:	pla
 	plp
 	lda	sh_05f8,y
 	tax
-	lda	sh_status_save,y
+	lda	sh_status_save2,y
 	pha
 	lda	sh_0678,y
 	tay
@@ -1285,8 +1293,17 @@ Lcdc8:	pla
 Lcde2:	rts
 
 
-Dcde3:	fcb	$03,$03,$83,$01,$83,$01,$01,$01
-	fcb	$03,$83
+expected_param_cnt_tbl:
+	fcb	$03	; status
+	fcb	$03	; readblk
+	fcb	$83	; writeblk
+	fcb	$01	; format
+	fcb	$83	; control
+	fcb	$01	; init
+	fcb	$01	; open
+	fcb	$01	; close
+	fcb	$03	; read
+	fcb	$83	; write
 
 
 Scded:	pha
@@ -1395,6 +1412,7 @@ Lce65:	lda	boot_prodos_command_block,y
 	tax
 	jmp	L0801
 
+
 boot_error:
 	jsr	mon_setvid
 	jsr	mon_setkbd
@@ -1412,13 +1430,16 @@ Lcea4:	ldx	#23		; bottom line of display
 	lda	#$00
 	sta	mon_ch
 	ldx	#$00
+
 	ldy	slot
-	lda	sh_retry_cnt_l,y	; not being used as retry count here?
+	lda	sh_status_save1,y
 	bne	Lceba
+
 	ldx	#msg_not_bootable - msg_tab
 Lceba:	cmp	#stat_no_drive
 	bne	Lcec0
 	ldx	#msg_no_dev - msg_tab
+
 Lcec0:	cmp	#stat_offline
 	bne	Lcec6
 	ldx	#msg_no_disk - msg_tab
