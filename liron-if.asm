@@ -1,6 +1,7 @@
 ; Apple II UniDisk 3.5 (Liron) disk interface card firmware
 ; Firmware P/N 341-????
-; Copyright 2018 Eric Smith <spacewar@gmail.com>
+; Copyright 1985 Apple Computer, Inc.
+; Disassembly copyright 2018 Eric Smith <spacewar@gmail.com>
 
 	cpu	6502
 
@@ -54,23 +55,23 @@ prodos_buffer	equ	$44
 prodos_block	equ	$46
 
 Z48		equ	$48
-Z4b		equ	$4b
-Z4c		equ	$4c
-Z4d		equ	$4d
-Z4e		equ	$4e
-Z4f		equ	$4f
-Z50		equ	$50
-Z51		equ	$51
+group_count	equ	$4b	; count of seven-byte groups
+odd_byte_count	equ	$4c	; count of "odd bytes"
+Z4d		equ	$4d	; rx packet data status byte
+Z4e		equ	$4e	; rx packet aux type
+Z4f		equ	$4f	; rx packet type
+Z50		equ	$50	; rx packet source ID
+Z51		equ	$51	; rx packet destination ID
 Z52		equ	$52
 Z53		equ	$53
+
 Z54		equ	$54
-Z55		equ	$55
 Z56		equ	$56
-Z57		equ	$57
+
 slot		equ	$58
 Z59		equ	$59
-Z5a		equ	$5a
-Z5b		equ	$5b
+Z5a		equ	$5a	; destination ID
+Z5b		equ	$5b	; packet type
 
 
 ; per-slot screen holes (index by slot)
@@ -173,13 +174,15 @@ Lcn14:	ldx	#$c0 + slotnum
 	jmp	shared_rom_entry
 
 
-; continuation of Sc960 subroutine (in shared ROM)
+; continuation of smartport_bus_read_packet subroutine (in shared ROM)
 Lcn21:	ldy	#$00
-	lda	Z4b
-	pha
-	bne	Lcn2b
-	jmp	Lcnb8
 
+	lda	group_count		; get group count
+	pha			; and save for later
+	bne	Lcn2b
+	jmp	Lcnb8		;   no groups, skip
+
+; read seven-byte groups
 Lcn2b:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn2b
 	sta	Z59
@@ -200,7 +203,7 @@ Lcn3e:	lda	iwm_q6l + (slotnum << 4)
 	sta	checksum
 	iny
 	bne	Lcn51
-	inc	Z57
+	inc	Z56+1
 
 Lcn51:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcn51
@@ -226,7 +229,7 @@ Lcn6f:	lda	iwm_q6l + (slotnum << 4)
 	sta	checksum
 	iny
 	bne	Lcn82
-	inc	Z57
+	inc	Z56+1
 
 Lcn82:	ldx	Z59
 Lcn84:	lda	iwm_q6l + (slotnum << 4)
@@ -252,15 +255,17 @@ Lcna2:	lda	iwm_q6l + (slotnum << 4)
 	eor	checksum
 	sta	checksum
 	iny
-	dec	Z4b
+
+	dec	group_count
 	beq	Lcnb8
 	jmp	Lcn2b
 
 Lcnb8:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcnb8
 	sta	Z59
-	pla
-	sta	Z4b
+
+	pla			; restore group count
+	sta	group_count
 
 Lcnc2:	lda	iwm_q6l + (slotnum << 4)
 	bpl	Lcnc2
@@ -273,7 +278,7 @@ Lcncd:	ldy	iwm_q6l + (slotnum << 4)
 	bpl	Lcncd
 	cpy	#$c8
 	bne	Lcnf2
-	ldx	Z4c
+	ldx	odd_byte_count
 	beq	Lcne2
 
 	ldy	#$00
@@ -364,17 +369,17 @@ Lc82c:	asl	iwm_q6l,x
 
 	jsr	send_80		; aux type
 
-	jsr	send_80		; data statys byte
+	jsr	send_80		; data status byte
 
-	lda	Z4c		; length of packet "odd bytes", 0-6
+	lda	odd_byte_count	; length of packet "odd bytes", 0-6
 	ora	#$80
 	jsr	send_nib7
 
-	lda	Z4b		; number of encoded 7-byte groups
+	lda	group_count		; number of encoded 7-byte groups
 	ora	#$80
 	jsr	send_nib7
 
-	lda	Z4c		; any "odd bytes"?
+	lda	odd_byte_count	; any "odd bytes"?
 	beq	Lc873		;   no, skip
 
 ; send "odd bytes"
@@ -386,11 +391,11 @@ Lc862:	asl	iwm_q6l,x
 	iny
 	lda	(Z54),y
 	ora	#$80
-	cpy	Z4c
+	cpy	odd_byte_count
 	bcc	Lc862
 
 ; send groups
-Lc873:	lda	Z4b		; any groups to send?
+Lc873:	lda	group_count		; any groups to send?
 	bne	Lc87a		;   yes
 
 	jmp	send_checksum	;   no
@@ -414,7 +419,7 @@ Lc888:	ldy	iwm_q6l,x
 	rol	Z41
 	iny
 	bne	Lc8a1
-	inc	Z57
+	inc	Z56+1
 	jmp	Lc8a3
 
 Lc8a1:	pha
@@ -447,7 +452,7 @@ Lc8a3:	lda	#$02
 	rol	Z41
 	iny
 	bne	Lc8dd
-	inc	Z57
+	inc	Z56+1
 	jmp	Lc8df
 Lc8dd:	pha
 	pla
@@ -476,7 +481,7 @@ Lc8df:	lda	Z51
 	rol	Z41
 	iny
 
-	dec	Z4b		; sent last group?
+	dec	group_count		; sent last group?
 	beq	send_checksum	;   yes
 
 	jmp	Lc87d		;   no, send another group
@@ -538,23 +543,29 @@ packet_sync_sequence:
 packet_sync_sequence_len equ *-packet_sync_sequence
 
 
+; delay routine - unused?
 	jsr	Sc95b
 	nop
 	nop
 Sc95b:	nop
 	rts
 
+
 Lc95d:	jmp	Sc93d
 
 
-Sc960:	lda	#$00
+; on entry, Z54
+smartport_bus_read_packet:	lda	#$00
 	sta	checksum
+
+; copy buffer pointer to group pointer
 	lda	Z54
 	sta	Z56
-	lda	Z55
-	sta	Z57
+	lda	Z54+1
+	sta	Z56+1
 
-	lda	#$21	; point Z52 at LCn21 for later continuation of execution
+; point Z52 at LCn21 for later continuation of execution
+	lda	#$21
 	sta	Z52
 	lda	slot
 	clc
@@ -576,26 +587,28 @@ Lc987:	lda	iwm_q6l,x	; read a nibble
 	cmp	#$c3		; is it the sync byte?
 	bne	Lc987		; loop if not
 
-	ldy	#$06
+	ldy	#$06		; read first six nibbles of packet
 Lc995:	lda	iwm_q6l,x	; read a nibble
 	bpl	Lc995		; loop if don't have a nibble yet
 	and	#$7f
-	sta	Z4b,y
+	sta	group_count,y		; store in reverse order
 	eor	#$80
 	eor	checksum
 	sta	checksum
 	dey
 	bpl	Lc995
 
-	lda	Z4c
-	beq	Lc9d3
-	clc
+	lda	odd_byte_count	; any odd bytes?
+	beq	Lc9d3		;   no
+
+	clc			; advance group pointer by number of odd bytes
 	adc	Z54
 	sta	Z56
-	lda	Z55
+	lda	Z54+1
 	adc	#$00
-	sta	Z57
+	sta	Z56+1
 
+; receive "odd bytes"
 	ldy	#$00
 Lc9b9:	lda	iwm_q6l,x
 	bpl	Lc9b9
@@ -608,8 +621,9 @@ Lc9c1:	lda	iwm_q6l,x
 	eor	#$80
 Lc9cc:	sta	(Z54),y
 	iny
-	cpy	Z4c
+	cpy	odd_byte_count
 	bcc	Lc9c1
+
 Lc9d3:	jmp	(Z52)		; continue from slot ROM space
 
 
@@ -740,7 +754,7 @@ Lcabc:	rts
 Scabd:	ldy	slot
 	lda	#$05
 	sta	sh_04f8,y
-Lcac4:	jsr	Sc960
+Lcac4:	jsr	smartport_bus_read_packet
 	bcc	Lcad8
 
 	ldy	#1
@@ -774,12 +788,12 @@ Dcaeb:	fcb	$00,$7f,$ff
 ; number of 7-byte groups and the number of "odd bytes"
 Scaee:	ldx	Z4e	; high byte of length
 	beq	Lcb05
-	lda	Z55
-	sta	Z57
+	lda	Z54+1
+	sta	Z56+1
 	lda	#$80
 	cpx	#$01
 	beq	Lcb00
-	inc	Z57
+	inc	Z56+1
 	lda	#$00
 Lcb00:	clc
 	adc	Z54
@@ -787,9 +801,9 @@ Lcb00:	clc
 
 ; divide high byte of length by 7 using table lookup
 Lcb05:	lda	page_div_7_tab,x
-	sta	Z4b
+	sta	group_count
 	lda	page_rem_7_tab,x
-	sta	Z4c
+	sta	odd_byte_count
 
 	ldx	#$05	; start table lookup at entry for 2^7
 
@@ -805,15 +819,15 @@ Lcb18:	asl	Z59
 
 	lda	pow2_rem_7,x
 Lcb1f:	clc
-	adc	Z4c
+	adc	odd_byte_count
 	cmp	#$07
 	bcc	Lcb28
 	sbc	#$07
-Lcb28:	sta	Z4c
+Lcb28:	sta	odd_byte_count
 
 	lda	pow2_div_7,x
-	adc	Z4b
-	sta	Z4b
+	adc	group_count
+	sta	group_count
 
 Lcb31:	dex
 	bmi	Lcb3a
@@ -821,7 +835,7 @@ Lcb31:	dex
 	tya
 	jmp	Lcb1f
 
-Lcb3a:	lda	Z55
+Lcb3a:	lda	Z54+1
 	pha
 	lda	#$00
 	ldx	Z4e
@@ -835,8 +849,8 @@ Lcb46:	eor	(Z54),y
 	eor	(Z56),y
 	cpx	#$01
 	beq	Lcb57
-	inc	Z55
-Lcb57:	inc	Z55
+	inc	Z54+1
+Lcb57:	inc	Z54+1
 Lcb59:	ldy	Z4d
 	beq	Lcb66
 	eor	(Z54),y
@@ -846,8 +860,8 @@ Lcb5f:	eor	(Z54),y
 	eor	(Z54),y
 Lcb66:	sta	checksum
 	pla
-	sta	Z55
-	ldy	Z4c
+	sta	Z54+1
+	ldy	odd_byte_count
 	dey
 	lda	#$00
 	sta	Z59
@@ -858,13 +872,13 @@ Lcb72:	lda	(Z54),y
 	bpl	Lcb72
 	sec
 	ror	Z59
-	lda	Z4c
+	lda	odd_byte_count
 	clc
 	adc	Z54
 	sta	Z56
-	lda	Z55
+	lda	Z54+1
 	adc	#$00
-	sta	Z57
+	sta	Z56+1
 	ldy	#$06
 Lcb8c:	sec
 	lda	(Z56),y
@@ -881,7 +895,7 @@ Lcb95:	ror	Z41
 	adc	#$07
 	sta	Z56
 	bcc	Lcba8
-	inc	Z57
+	inc	Z56+1
 Lcba8:	rts
 
 
@@ -901,25 +915,25 @@ Lcbb6:	tya
 	rts
 
 
-Scbbf:	lda	Z4b
+Scbbf:	lda	group_count
 	tay
 	ldx	#$00
-	stx	Z4b
+	stx	group_count
 	ldx	#$03
 Lcbc8:	asl
-	rol	Z4b
+	rol	group_count
 	dex
 	bne	Lcbc8
 	clc
-	adc	Z4c
+	adc	odd_byte_count
 	bcc	Lcbd5
-	inc	Z4b
-Lcbd5:	sty	Z4c
+	inc	group_count
+Lcbd5:	sty	odd_byte_count
 	sec
-	sbc	Z4c
+	sbc	odd_byte_count
 	bcs	Lcbde
-	dec	Z4b
-Lcbde:	ldy	Z4b
+	dec	group_count
+Lcbde:	ldy	group_count
 	rts
 
 
@@ -999,7 +1013,7 @@ Lcc30:	tax
 Lcc3c:	lda	sh_05f8,y	; set Z54 to point to cmd num -1
 	sta	Z54
 	lda	sh_0678,y
-	sta	Z55
+	sta	Z54+1
 
 	ldy	#$01		; copy SmartPort command
 	lda	(Z54),y
@@ -1010,7 +1024,7 @@ Lcc3c:	lda	sh_05f8,y	; set Z54 to point to cmd num -1
 	tax
 	iny
 	lda	(Z54),y
-	sta	Z55
+	sta	Z54+1
 	stx	Z54
 
 	lda	#$01
@@ -1091,7 +1105,7 @@ Lcccf:	lda	#$28
 	lda	#$00
 	sta	Z4e
 
-	sta	Z55
+	sta	Z54+1
 	lda	#$42
 	sta	Z54
 
@@ -1121,7 +1135,7 @@ Lcd02:	lda	Z5a
 	lda	prodos_buffer
 	sta	Z54
 	lda	prodos_buffer+1
-	sta	Z55
+	sta	Z54+1
 
 	ldx	prodos_command
 	lda	Dcde3,x
@@ -1140,7 +1154,7 @@ Lcd02:	lda	Z5a
 	sta	Z54
 	pla
 	bcc	Lcd4f
-	inc	Z55
+	inc	Z54+1
 	jmp	Lcd4f
 Lcd41:	cpx	#$02
 	bne	Lcd4b
@@ -1167,7 +1181,7 @@ Lcd60:	ldy	slot
 	lda	#$45
 	ldx	#$00
 	sta	Z54
-	stx	Z55
+	stx	Z54+1
 Lcd73:	jsr	Scabd
 	bcs	Lcd5c
 	jsr	Scbbf
@@ -1267,7 +1281,7 @@ Scded:	pha
 	lda	#$42
 	sta	Z54
 	lda	#$00
-	sta	Z55
+	sta	Z54+1
 	lda	#$80
 	sta	Z5b
 	jsr	smartport_bus_disable
@@ -1283,7 +1297,7 @@ Lce19:	inc	Z5a
 	dec	Z5a
 	jmp	Lce34
 
-Lce2d:	jsr	Sc960
+Lce2d:	jsr	smartport_bus_read_packet
 	lda	Z4d
 	beq	Lce19
 
